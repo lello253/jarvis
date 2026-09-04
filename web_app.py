@@ -4,6 +4,28 @@ import json
 from google import genai
 import streamlit.components.v1 as components
 
+# PIN di accesso personale per Jarvis
+PIN_SICUREZZA = "151010"  # Sostituisci con il PIN che preferisci
+
+if "autenticato" not in st.session_state:
+    st.session_state.autenticato = False
+
+if not st.session_state.autenticato:
+    st.markdown("""
+        <style>
+        .stApp { background-color: #0b0e14; color: #00f0ff; }
+        </style>
+    """, unsafe_allow_html=True)
+    st.title("🔒 J.A.R.V.I.S. - Autenticazione")
+    pin_inserito = st.text_input("Inserisci il PIN di sicurezza", type="password")
+    if st.button("Accedi"):
+        if pin_inserito == PIN_SICUREZZA:
+            st.session_state.autenticato = True
+            st.rerun()
+        else:
+            st.error("PIN errato. Accesso negato.")
+    st.stop()
+
 # Configurazione della pagina Streamlit
 st.set_page_config(
     page_title="J.A.R.V.I.S. System",
