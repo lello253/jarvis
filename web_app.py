@@ -175,29 +175,27 @@ if page == "🤖 Assistente Vocale / Chat":
         with st.chat_message("assistant"):
             with st.spinner("Elaborazione in corso..."):
                 reply = ""
-                # Tentativo 1: Modello Primario
+                # Modello Primario (quello che voleva prima)
                 try:
                     res = client.models.generate_content(
-                        model="gemini-2.5-flash",
+                        model="gemini-3.6-flash",
                         contents=prompt
                     )
                     reply = res.text if res.text else "Nessuna risposta generata."
-                except Exception as err_primary:
-                    # Tentativo 2: Modello di Riserva se il primario è sovraccarico (503) o in errore
+                except Exception:
+                    # Modello Fallback (quello che chiede nell'ultimo screenshot)
                     try:
                         res = client.models.generate_content(
-                            model="gemini-2.5-pro",
+                            model="gemini-3.1-pro-preview",
                             contents=prompt
                         )
                         reply = res.text if res.text else "Nessuna risposta generata."
                     except Exception as err_secondary:
-                        st.error(f"Errore di connessione ai server Google: {err_secondary}")
+                        st.error(f"Errore: {err_secondary}")
 
-                # Se abbiamo ottenuto una risposta valida da uno dei due modelli, la mostriamo
                 if reply:
                     st.markdown(reply)
                     st.session_state.messages.append({"role": "assistant", "content": reply})
-
 # --- SCHERMATA 2: GESTIONE NOTE ---
 elif page == "📝 Gestione Note":
     st.markdown("""
