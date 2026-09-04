@@ -13,7 +13,7 @@ st.set_page_config(
 )
 
 # PIN di sicurezza
-PIN_SICUREZZA = "2530"  # Cambialo se necessario
+PIN_SICUREZZA = "151010"  # Cambialo se necessario
 
 if "autenticato" not in st.session_state:
     st.session_state.autenticato = False
