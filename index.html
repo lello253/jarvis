@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>J.A.R.V.I.S. Core</title>
+    <!-- Tailwind CSS per styling reattivo -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #0b0e14; color: #e0e6ed; font-family: system-ui, -apple-system, sans-serif; }
+        .cyber-border { border-bottom: 2px solid #00f0ff; text-shadow: 0 0 10px rgba(0, 240, 255, 0.5); }
+        .chat-container { height: calc(100vh - 180px); }
+        .bot-msg { background-color: #151a23; border-left: 3px solid #00f0ff; }
+        .user-msg { background-color: #1e293b; border-right: 3px solid #3b82f6; }
+    </style>
+</head>
+<body class="flex flex-col h-screen overflow-hidden">
+
+    <!-- Header -->
+    <header class="p-4 text-center bg-[#0d1117] cyber-border flex justify-between items-center">
+        <h1 class="text-xl font-bold tracking-widest text-[#00f0ff]">⚡ J.A.R.V.I.S.</h1>
+        <div id="status" class="text-xs text-green-400 font-mono">ONLINE</div>
+    </header>
+
+    <!-- Modal Login PIN -->
+    <div id="loginModal" class="fixed inset-0 bg-black/90 flex items-center justify-center p-4 z-50">
+        <div class="bg-[#151a23] p-6 rounded-xl border border-[#00f0ff] w-full max-w-sm text-center">
+            <h2 class="text-lg font-bold text-[#00f0ff] mb-4">ACCESS CONTROL</h2>
+            <input type="password" id="pinInput" placeholder="Inserisci PIN" class="w-full p-3 rounded bg-[#0b0e14] border border-gray-700 text-center text-white mb-4 tracking-widest text-lg focus:outline-none focus:border-[#00f0ff]">
+            <button onclick="login()" class="w-full bg-[#00f0ff] text-black font-bold py-3 rounded-lg hover:bg-cyan-400 transition">SBLOCCA NUCLEO</button>
+        </div>
+    </div>
+
+    <!-- Chat Area -->
+    <main id="chatBox" class="flex-1 p-4 overflow-y-auto space-y-3 chat-container">
+        <div class="bot-msg p-3 rounded-lg text-sm max-w-[85%]">
+            Sistemi operativi. In cosa posso assisterla oggi?
+        </div>
+    </main>
+
+    <!-- Bottom Bar (Input e Voce) -->
+    <footer class="p-3 bg-[#0d1117] border-t border-gray-800 flex items-center gap-2">
+        <button onclick="toggleVoice()" id="micBtn" class="bg-gray-800 text-[#00f0ff] p-3 rounded-full hover:bg-gray-700 transition">
+            🎤
+        </button>
+        <input type="text" id="userInput" placeholder="Comando a J.A.R.V.I.S..." class="flex-1 p-3 rounded-xl bg-[#151a23] border border-gray-700 text-white focus:outline-none focus:border-[#00f0ff]" onkeypress="if(event.key === 'Enter') sendMsg()">
+        <button onclick="sendMsg()" class="bg-[#00f0ff] text-black font-bold px-4 py-3 rounded-xl hover:bg-cyan-400 transition">
+            ➔
+        </button>
+    </footer>
+
+    <script>
+        // SOSTITUISCI QUESTO URL CON QUELLO CHE TI FORNISCE RENDER!
+        let BACKEND_URL = "https://jarvis-app-1dmj.onrender.com"; 
+        let userPin = "";
+
+        function login() {
+            userPin = document.getElementById('pinInput').value;
+            if(userPin) {
+                document.getElementById('loginModal').classList.add('hidden');
+            }
+        }
+
+        async function sendMsg() {
+            const input = document.getElementById('userInput');
+            const txt = input.value.trim();
+            if (!txt) return;
+
+            appendMsg(txt, 'user');
+            input.value = '';
+
+            try {
+                const res = await fetch(`${BACKEND_URL}/api/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'x-pin': userPin },
+                    body: JSON.stringify({ message: txt })
+                });
+                
+                const data = await res.json();
+                if(res.ok) {
+                    appendMsg(data.response, 'bot');
+                } else {
+                    appendMsg(`Errore: ${data.detail || 'Accesso Negato'}`, 'bot');
+                }
+            } catch(e) {
+                appendMsg("Impossibile connettersi al server Render.", 'bot');
+            }
+        }
+
+        function appendMsg(txt, sender) {
+            const box = document.getElementById('chatBox');
+            const div = document.createElement('div');
+            div.className = sender === 'user' 
+                ? 'user-msg p-3 rounded-lg text-sm max-w-[85%] ml-auto text-right' 
+                : 'bot-msg p-3 rounded-lg text-sm max-w-[85%]';
+            div.innerText = txt;
+            box.appendChild(div);
+            box.scrollTop = box.scrollHeight;
+        }
+
+        // Web Speech API per dettatura vocale fluida
+        function toggleVoice() {
+            if (!('webkitSpeechRecognition' in window || 'SpeechRecognition' in window)) {
+                alert("Riconoscimento vocale non supportato.");
+                return;
+            }
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            const rec = new SpeechRecognition();
+            rec.lang = 'it-IT';
+            rec.start();
+            
+            document.getElementById('micBtn').innerText = "🔴";
+            rec.onresult = (e) => {
+                document.getElementById('userInput').value = e.results[0][0].transcript;
+                document.getElementById('micBtn').innerText = "🎤";
+                sendMsg();
+            };
+            rec.onerror = () => { document.getElementById('micBtn').innerText = "🎤"; };
+        }
+    </script>
+</body>
+</html>
