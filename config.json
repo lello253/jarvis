@@ -1,0 +1,11 @@
+{
+    "theme": "Executive",
+    "notes_in_bottom_panel": true,
+    "assistant_name": "JARVIS",
+    "user_name": "Sir",
+    "face_auth": true,
+    "tts_engine": "Edge-TTS (Online High Quality)",
+    "voice_speed": 110,
+    "llm_provider": "Ollama Locale (Qwen / Llama)",
+    "api_key": ""
+}

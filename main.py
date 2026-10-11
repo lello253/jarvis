@@ -22,6 +22,7 @@ import time
 import json
 import sys
 import traceback
+import keyboard  # <--- AGGIUNGI QUESTO IMPORT
 from datetime import datetime
 from pathlib import Path
 
@@ -87,33 +88,62 @@ def _get_api_key() -> str:
         return json.load(f)["gemini_api_key"]
 
 
+import time
+from pathlib import Path
+
+# Variabili globali per il caching avanzato
+_base_prompt_cache = None
+_base_prompt_mtime = 0.0
+
+_obsidian_memory_cache = None
+_last_memory_update = 0.0
+_CACHE_TIMEOUT = 600  # 10 minuti fallback
+
 def _load_system_prompt() -> str:
+    global _base_prompt_cache, _base_prompt_mtime
     global _obsidian_memory_cache, _last_memory_update
-    
+
     tempo_attuale = time.time()
-    
-    # Se la cache è valida (meno di 10 minuti), usa quella
+
+    # 1. CACHING INTELLIGENTE DEL BASE PROMPT (Basato su mtime del file)
+    try:
+        if PROMPT_PATH.exists():
+            current_mtime = PROMPT_PATH.stat().st_mtime
+            # Legge da disco solo se il file è stato effettivamente modificato
+            if _base_prompt_cache is None or current_mtime > _base_prompt_mtime:
+                _base_prompt_cache = PROMPT_PATH.read_text(encoding="utf-8")
+                _base_prompt_mtime = current_mtime
+                print("[JARVIS Cache] Base prompt ricaricato da disco.")
+        else:
+            if _base_prompt_cache is None:
+                _base_prompt_cache = (
+                    "Sei JARVIS Enterprise, l'assistente IA aziendale avanzato. "
+                    "Rispondi sempre in italiano, mantenendo un tono elegante, formale ed efficiente."
+                )
+    except Exception as e:
+        print(f"[JARVIS Error] Errore lettura base prompt: {e}")
+        if _base_prompt_cache is None:
+            _base_prompt_cache = "Sei JARVIS Enterprise."
+
+    # 2. CACHING MEMORIA OBSIDIAN (Con fallback sicuro)
     if _obsidian_memory_cache is not None and (tempo_attuale - _last_memory_update) < _CACHE_TIMEOUT:
         memoria_obsidian = _obsidian_memory_cache
     else:
         try:
-            # Legge la memoria isolata da app_memory tramite obsidian_memory.py
             memoria_obsidian = leggi_tutta_la_memoria()
             _obsidian_memory_cache = memoria_obsidian
             _last_memory_update = tempo_attuale
+            print("[JARVIS Cache] Memoria Obsidian aggiornata.")
         except Exception as e:
-            print(f"Errore caricamento memoria locale: {e}")
-            memoria_obsidian = ""
+            print(f"[JARVIS Error] Errore caricamento memoria locale: {e}")
+            memoria_obsidian = _obsidian_memory_cache if _obsidian_memory_cache is not None else ""
 
-    try:
-        base_prompt = PROMPT_PATH.read_text(encoding="utf-8")
-    except Exception:
-        base_prompt = (
-            "Sei JARVIS Enterprise, l'assistente IA aziendale avanzato. "
-            "Rispondi sempre in italiano, mantenendo un tono elegante, formale ed efficiente."
-        )
-    
-    return f"{base_prompt}\n\n[MEMORIA COMPLETA LOCALE]\n{memoria_obsidian}"
+    return f"{_base_prompt_cache}\n\n[MEMORIA COMPLETA LOCALE]\n{memoria_obsidian}"
+
+def invalidate_obsidian_cache():
+    """Forza il ricaricamento della memoria di Obsidian alla prossima chiamata."""
+    global _last_memory_update
+    _last_memory_update = 0.0
 
 _CTRL_RE = re.compile(r"<ctrl\d+>", re.IGNORECASE)
 
@@ -698,13 +728,15 @@ class JarvisLive:
 
         # Load customization from config
         try:
-            _cfg = json.loads(open(API_CONFIG_PATH, encoding="utf-8").read())
+            with open(API_CONFIG_PATH, encoding="utf-8") as f:
+                _cfg = json.load(f)
             self._asst_name = (_cfg.get("assistant_name") or "JARVIS").strip()
             _user_name = (_cfg.get("user_name") or "").strip()
         except Exception:
             self._asst_name = "JARVIS"
             _user_name = ""
 
+        # Sfrutta il caching in-memory per eliminare la latenza I/O su disco
         memory     = load_memory()
         mem_str    = format_memory_for_prompt(memory)
         sys_prompt = _load_system_prompt()
@@ -734,13 +766,20 @@ class JarvisLive:
             parts.append(mem_str)
         parts.append(sys_prompt)
 
+        # Gestione del Session Handle per ripristinare la sessione senza reset
+        resumption_cfg = (
+            types.SessionResumptionConfig(session_handle=self._session_handle)
+            if getattr(self, "_session_handle", None)
+            else types.SessionResumptionConfig()
+        )
+
         return types.LiveConnectConfig(
             response_modalities=["AUDIO"],
             output_audio_transcription={},
             input_audio_transcription={},
             system_instruction="\n".join(parts),
             tools=[{"function_declarations": TOOL_DECLARATIONS}],
-            session_resumption=types.SessionResumptionConfig(),
+            session_resumption=resumption_cfg,
             speech_config=types.SpeechConfig(
                 voice_config=types.VoiceConfig(
                     prebuilt_voice_config=types.PrebuiltVoiceConfig(
@@ -1493,6 +1532,11 @@ class JarvisLive:
                     asyncio.TaskGroup() as tg,
                 ):
                     self.session          = session
+                    
+                    # Salva il session_handle per abilitare la Session Resumption silente
+                    if hasattr(session, "session_handle"):
+                        self._session_handle = session.session_handle
+
                     self.audio_in_queue   = asyncio.Queue()
                     self.out_queue        = asyncio.Queue(maxsize=200)
                     self._turn_done_event = asyncio.Event()
@@ -1532,11 +1576,6 @@ class JarvisLive:
             except SystemExit:
                 raise
             except BaseException as e:
-                # Catches both Exception and BaseExceptionGroup (Python 3.11+
-                # TaskGroup raises BaseExceptionGroup when tasks are cancelled
-                # externally, which `except Exception` would miss, letting the
-                # exception escape the while-loop and causing asyncio.run() to
-                # start shutdown — resulting in "executor after shutdown" errors).
                 err_str = str(e)
                 print(f"[JARVIS] Error ({type(e).__name__}): {e}")
                 traceback.print_exc()
@@ -1561,8 +1600,7 @@ class JarvisLive:
                     _conn_backoff = min(getattr(self, "_conn_backoff", 3) * 2, 60)
                     self._conn_backoff = _conn_backoff
                     self.ui.write_log(
-                        f"NET: Bağlantı kurulamadı — {_conn_backoff}s sonra tekrar deneniyor. "
-                        "(VPN gerekiyor olabilir)"
+                        f"NET: Connection failed — retrying in {_conn_backoff}s."
                     )
                 else:
                     self._conn_backoff = 3
@@ -1582,8 +1620,34 @@ class JarvisLive:
             print(f"[JARVIS] Reconnecting in {delay}s...")
             await asyncio.sleep(delay)
 
+from PyQt6.QtCore import QObject, pyqtSignal
+
+class HotkeyBridge(QObject):
+    toggle_sig = pyqtSignal()
+
 def main():
-    ui = JarvisUI("face.png")  # L'HUD nativo blu con grafici CPU/RAM/GPU e cerchio Sci-Fi
+    ui = JarvisUI("face.png")
+
+    # Bridge sicuro tra il thread di 'keyboard' e l'interfaccia PyQt
+    bridge = HotkeyBridge()
+
+    def _toggle_safe():
+        win = ui._win
+        if win.isMinimized() or not win.isVisible():
+            win.showNormal()
+            win.activateWindow()
+            win.raise_()
+        else:
+            win.hide()
+
+    bridge.toggle_sig.connect(_toggle_safe)
+
+    try:
+        # Il thread secondario invia solo il segnale al thread principale di PyQt
+        keyboard.add_hotkey("alt+space", lambda: bridge.toggle_sig.emit())
+        ui.write_log("SYS: Hotkey globale 'Alt + Space' attiva.")
+    except Exception as e:
+        ui.write_log(f"ERR: Impossibile registrare Hotkey (richiede Admin): {e}")
 
     def runner():
         ui.wait_for_api_key()

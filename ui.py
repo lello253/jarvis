@@ -10,7 +10,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-
+from ui_graph import ObsidianGraphView
 import psutil
 
 if platform.system() == "Windows":
@@ -33,8 +33,364 @@ from PyQt6.QtGui import (
 from PyQt6.QtWidgets import (
     QApplication, QFileDialog, QFrame, QHBoxLayout, QLabel, QLineEdit,
     QMainWindow, QPushButton, QScrollArea, QSizePolicy, QSplitter,
-    QStackedWidget, QTextEdit, QVBoxLayout, QWidget, QProgressBar,
+    QStackedWidget, QTextEdit, QVBoxLayout, QWidget, QProgressBar, QTabWidget,
 )
+
+import importlib.util
+
+import json
+from PyQt6.QtWidgets import (
+    QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, QWidget,
+    QLabel, QComboBox, QCheckBox, QLineEdit, QPushButton, QGroupBox
+)
+
+import json
+import importlib.util
+from PyQt6.QtWidgets import (
+    QDialog, QVBoxLayout, QHBoxLayout, QTabWidget, QWidget, QLabel,
+    QLineEdit, QComboBox, QCheckBox, QPushButton, QGroupBox, QSlider
+)
+from PyQt6.QtGui import QFont
+from PyQt6.QtCore import Qt
+
+
+import json
+import os
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import (
+    QComboBox,
+    QCheckBox,
+    QDialog,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QSlider,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
+
+from glitter_overlay import GlitterOverlay
+
+class SettingsDialog(QDialog):
+    """Dialog delle Impostazioni Avanzate di JARVIS (Temi, Note, Profilo, Audio e AI Engine)."""
+
+    def __init__(self, parent=None, config_path="config.json"):
+        super().__init__(parent)
+        self.setWindowTitle("⚙ Impostazioni JARVIS")
+        self.resize(520, 500)
+        self.config_path = config_path
+        self.config = self.load_config()
+
+        # Stile Sci-Fi Cyberpunk ottimizzato per l'HUD
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #0b0e14;
+                color: #00f0ff;
+                font-family: 'Segoe UI', sans-serif;
+            }
+            QTabWidget::pane {
+                border: 1px solid #1f293d;
+                background: #111622;
+                border-radius: 6px;
+            }
+            QTabBar::tab {
+                background: #131722;
+                color: #8a99ad;
+                padding: 8px 14px;
+                border: 1px solid #1f293d;
+                border-bottom: none;
+                border-top-left-radius: 4px;
+                border-top-right-radius: 4px;
+            }
+            QTabBar::tab:selected {
+                background: #1f293d;
+                color: #00f0ff;
+                font-weight: bold;
+            }
+            QGroupBox {
+                border: 1px solid #1f293d;
+                margin-top: 10px;
+                padding: 12px;
+                color: #00f0ff;
+                font-weight: bold;
+                border-radius: 6px;
+            }
+            QLabel {
+                color: #8a99ad;
+                font-size: 12px;
+            }
+            QComboBox, QLineEdit {
+                background-color: #131722;
+                border: 1px solid #1f293d;
+                color: #ffffff;
+                padding: 6px;
+                border-radius: 4px;
+                selection-background-color: #00f0ff;
+                selection-color: #0b0e14;
+            }
+            QComboBox:focus, QLineEdit:focus {
+                border: 1px solid #00f0ff;
+            }
+            QCheckBox {
+                color: #e2e8f0;
+                padding: 4px;
+            }
+            QPushButton {
+                background-color: #131722;
+                border: 1px solid #00f0ff;
+                color: #00f0ff;
+                padding: 8px 18px;
+                border-radius: 4px;
+                font-weight: bold;
+            }
+            QPushButton:hover {
+                background-color: #00f0ff;
+                color: #0b0e14;
+            }
+            QSlider::groove:horizontal {
+                height: 4px;
+                background: #1f293d;
+                border-radius: 2px;
+            }
+            QSlider::handle:horizontal {
+                background: #00f0ff;
+                width: 14px;
+                margin: -5px 0;
+                border-radius: 7px;
+            }
+        """)
+
+        main_layout = QVBoxLayout(self)
+        self.tabs = QTabWidget()
+
+        # Inizializzazione schede
+        self.tabs.addTab(self._create_theme_tab(), "🎨 Temi")
+        self.tabs.addTab(self._create_notes_tab(), "📝 Note")
+        self.tabs.addTab(self._create_profile_tab(), "👤 Profilo")
+        self.tabs.addTab(self._create_voice_tab(), "🎙️️ Audio")
+        self.tabs.addTab(self._create_ai_tab(), "🔑 AI Engine")
+
+        main_layout.addWidget(self.tabs)
+
+        # Pulsanti d'azione
+        btn_layout = QHBoxLayout()
+        cancel_btn = QPushButton("ANNULLA")
+        save_btn = QPushButton("SALVA")
+
+        save_btn.clicked.connect(self.save_and_close)
+        cancel_btn.clicked.connect(self.reject)
+
+        btn_layout.addStretch()
+        btn_layout.addWidget(cancel_btn)
+        btn_layout.addWidget(save_btn)
+        main_layout.addLayout(btn_layout)
+
+    def _create_theme_tab(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        group = QGroupBox("Schema Colori Interfaccia")
+        g_layout = QVBoxLayout(group)
+
+        g_layout.addWidget(QLabel("Seleziona Tema:"))
+        self.combo_theme = QComboBox()
+        self.combo_theme.addItems([
+            "Cyan Cyberpunk (Default)",
+            "OLED Obsidian",
+            "Dark Enterprise",
+            "Neon Fluo",
+            "Cloud Sky",
+            "Purple Cyberpunk",
+            "Ironman Arc Reactor",
+            "Sparkle Glitter",
+            "Arctic",
+            "Matrix",
+            "Deep Space",
+            "Executive",
+            "Ocean",
+            "Glass"
+        ])
+
+        current_theme = self.config.get("theme", "Cyan Cyberpunk (Default)")
+        self.combo_theme.setCurrentText(current_theme)
+
+        g_layout.addWidget(self.combo_theme)
+        layout.addWidget(group)
+        layout.addStretch()
+        return widget
+
+    def _create_notes_tab(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        group = QGroupBox("Integrazione Note & HUD")
+        g_layout = QVBoxLayout(group)
+
+        self.check_bottom_panel = QCheckBox(
+            "Mostra note nel riquadro in basso"
+        )
+        self.check_bottom_panel.setChecked(
+            self.config.get("notes_in_bottom_panel", True)
+        )
+        g_layout.addWidget(self.check_bottom_panel)
+
+        layout.addWidget(group)
+        layout.addStretch()
+        return widget
+
+    def _create_profile_tab(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        group = QGroupBox("Identità Utente & Assistente")
+        g_layout = QVBoxLayout(group)
+
+        g_layout.addWidget(QLabel("Nome Assistente:"))
+        self.input_asst_name = QLineEdit(
+            self.config.get("assistant_name", "JARVIS")
+        )
+        g_layout.addWidget(self.input_asst_name)
+
+        g_layout.addWidget(QLabel("Nome Utente:"))
+        self.input_user_name = QLineEdit(self.config.get("user_name", "Sir"))
+        g_layout.addWidget(self.input_user_name)
+
+        self.check_face_auth = QCheckBox("Riconoscimento facciale all'avvio")
+        self.check_face_auth.setChecked(self.config.get("face_auth", True))
+        g_layout.addWidget(self.check_face_auth)
+
+        layout.addWidget(group)
+        layout.addStretch()
+        return widget
+
+    def _create_voice_tab(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        group = QGroupBox("Sintesi Vocale & Audio")
+        g_layout = QVBoxLayout(group)
+
+        g_layout.addWidget(QLabel("Motore Sintesi Vocale (TTS):"))
+        self.combo_tts = QComboBox()
+        self.combo_tts.addItems([
+            "Edge-TTS (Online High Quality)",
+            "Pyttsx3 (Offline Fast)",
+            "ElevenLabs API",
+        ])
+        self.combo_tts.setCurrentText(
+            self.config.get("tts_engine", "Edge-TTS (Online High Quality)")
+        )
+        g_layout.addWidget(self.combo_tts)
+
+        # Contenitore orizzontale per Label + Valore percentuale dello Slider
+        speed_header_layout = QHBoxLayout()
+        speed_label = QLabel("Velocità Parlato:")
+        self.lbl_speed_val = QLabel(f"{self.config.get('voice_speed', 110)}%")
+        self.lbl_speed_val.setStyleSheet("color: #00f0ff; font-weight: bold;")
+
+        speed_header_layout.addWidget(speed_label)
+        speed_header_layout.addStretch()
+        speed_header_layout.addWidget(self.lbl_speed_val)
+        g_layout.addLayout(speed_header_layout)
+
+        self.slider_speed = QSlider(Qt.Orientation.Horizontal)
+        self.slider_speed.setRange(80, 160)
+        self.slider_speed.setValue(self.config.get("voice_speed", 110))
+        # Update in tempo reale del valore testo %
+        self.slider_speed.valueChanged.connect(
+            lambda val: self.lbl_speed_val.setText(f"{val}%")
+        )
+
+        g_layout.addWidget(self.slider_speed)
+
+        layout.addWidget(group)
+        layout.addStretch()
+        return widget
+
+    def _create_ai_tab(self) -> QWidget:
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+
+        group = QGroupBox("Configurazione Modello LLM")
+        g_layout = QVBoxLayout(group)
+
+        g_layout.addWidget(QLabel("Provider Modello:"))
+        self.combo_model = QComboBox()
+        self.combo_model.addItems([
+            "Ollama Locale (Qwen / Llama)",
+            "Groq Cloud API",
+            "OpenAI GPT-4o",
+        ])
+        self.combo_model.setCurrentText(
+            self.config.get("llm_provider", "Ollama Locale (Qwen / Llama)")
+        )
+        g_layout.addWidget(self.combo_model)
+
+        g_layout.addWidget(QLabel("API Key (se richiesta dal provider):"))
+        self.input_api_key = QLineEdit(self.config.get("api_key", ""))
+        self.input_api_key.setEchoMode(QLineEdit.EchoMode.Password)
+        self.input_api_key.setPlaceholderText("Inserisci chiave API...")
+        g_layout.addWidget(self.input_api_key)
+
+        layout.addWidget(group)
+        layout.addStretch()
+        return widget
+
+    def load_config(self) -> dict:
+        defaults = {
+            "theme": "Cyan Cyberpunk (Default)",
+            "notes_in_bottom_panel": True,
+            "assistant_name": "JARVIS",
+            "user_name": "Sir",
+            "face_auth": True,
+            "tts_engine": "Edge-TTS (Online High Quality)",
+            "voice_speed": 110,
+            "llm_provider": "Ollama Locale (Qwen / Llama)",
+            "api_key": "",
+        }
+
+        if not os.path.exists(self.config_path):
+            return defaults
+
+        try:
+            with open(self.config_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                defaults.update(data)
+                return defaults
+        except Exception as e:
+            print(f"[Settings Error] Errore durante il caricamento: {e}")
+            return defaults
+
+    def save_and_close(self):
+        self.config = {
+            "theme": self.combo_theme.currentText(),
+            "notes_in_bottom_panel": self.check_bottom_panel.isChecked(),
+            "assistant_name": self.input_asst_name.text().strip(),
+            "user_name": self.input_user_name.text().strip(),
+            "face_auth": self.check_face_auth.isChecked(),
+            "tts_engine": self.combo_tts.currentText(),
+            "voice_speed": self.slider_speed.value(),
+            "llm_provider": self.combo_model.currentText(),
+            "api_key": self.input_api_key.text().strip(),
+        }
+        try:
+            with open(self.config_path, "w", encoding="utf-8") as f:
+                json.dump(self.config, f, indent=4, ensure_ascii=False)
+        except Exception as e:
+            print(f"[Settings Error] Salvataggio fallito: {e}")
+
+        self.accept()
+
+
+# Caricamento dinamico del gestore Smart Drop
+_spec = importlib.util.find_spec("actions.smart_drop_handler")
+if _spec is not None:
+    from actions.smart_drop_handler import process_dropped_file
+else:
+    process_dropped_file = None
 
 def _base_dir() -> Path:
     if getattr(sys, "frozen", False):
@@ -340,11 +696,24 @@ class _SysMetrics:
 
 _metrics = _SysMetrics()
 
+import math
+import random
+from PyQt6.QtCore import Qt, QTimer, QRectF, QPointF
+from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QRadialGradient, QFont
+from PyQt6.QtWidgets import QWidget, QSizePolicy
+
+import math
+import random
+from PyQt6.QtCore import Qt, QTimer, QRectF, QPointF
+from PyQt6.QtGui import QPainter, QColor, QPen, QBrush, QRadialGradient, QFont
+from PyQt6.QtWidgets import QWidget, QSizePolicy
+
 class HudCanvas(QWidget):
-    def __init__(self, face_path: str, assistant_name: str = "J.A.R.V.I.S", parent=None):
+    """Core d'Energia Volumetric - Sfera Reattiva & Reattore Arc Sincronizzato alla Voce."""
+    def __init__(self, face_path: str = "", assistant_name: str = "J.A.R.V.I.S", parent=None):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent)
-        self.setMinimumSize(300, 300)
+        self.setMinimumSize(320, 320)
         self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
         self.muted    = False
@@ -352,253 +721,225 @@ class HudCanvas(QWidget):
         self.state    = "INITIALISING"
         self._assistant_name = assistant_name
 
-        self._tick       = 0
-        self._scale      = 1.0
-        self._tgt_scale  = 1.0
-        self._halo       = 55.0
-        self._tgt_halo   = 55.0
-        self._last_t     = time.time()
-        self._scan       = 0.0
-        self._scan2      = 180.0
-        self._rings      = [0.0, 120.0, 240.0]
-        self._pulses: list[float] = [0.0, 50.0, 100.0]
-        self._blink      = True
-        self._blink_tick = 0
-        self._particles: list[list[float]] = []
-        self._face_px: QPixmap | None = None
-        self._load_face(face_path)
+        self._tick = 0.0
+        self._scale = 1.0
+        self._tgt_scale = 1.0
+        
+        # Tema e Colori
+        self._theme_name = "Cyan Cyberpunk (Default)"
+        self._theme_bg   = QColor("#080a0f")
+        self._theme_main = QColor("#00f0ff")
+        self._theme_sec  = QColor("#0055ff")
+
+        self._curr_main = QColor("#00f0ff")
+        self._curr_sec  = QColor("#0055ff")
+        self._last_voice_tick = 0.0
 
         self._tmr = QTimer(self)
         self._tmr.timeout.connect(self._step)
-        self._tmr.start(16)
+        self._tmr.start(16)  # 60 FPS
 
-    def _load_face(self, path: str):
-        try:
-            from PIL import Image, ImageDraw
-            import io
-            img = Image.open(path).convert("RGBA")
-            sz  = min(img.size)
-            img = img.resize((sz, sz), Image.LANCZOS)
-            mk  = Image.new("L", (sz, sz), 0)
-            ImageDraw.Draw(mk).ellipse((2, 2, sz - 2, sz - 2), fill=255)
-            img.putalpha(mk)
-            buf = io.BytesIO()
-            img.save(buf, format="PNG")
-            px = QPixmap(); px.loadFromData(buf.getvalue())
-            self._face_px = px
-        except Exception:
-            self._face_px = None
+    def apply_theme_colors(self, bg_hex: str, main_hex: str, sec_hex: str, theme_name: str = "Cyan Cyberpunk (Default)"):
+        self._theme_name = theme_name
+        self._theme_bg   = QColor(bg_hex)
+        self._theme_main = QColor(main_hex)
+        self._theme_sec  = QColor(sec_hex)
+        
+        # FORZA L'AGGIORNAMENTO ISTANTANEO (senza aspettare il lerp lento)
+        self._curr_main  = QColor(main_hex)
+        self._curr_sec   = QColor(sec_hex)
+        
+        self.update()
 
     def _step(self):
-        self._tick += 1
-        now = time.time()
-        if now - self._last_t > (0.12 if self.speaking else 0.5):
-            if self.speaking:
-                self._tgt_scale = random.uniform(1.06, 1.14)
-                self._tgt_halo  = random.uniform(145, 190)
-            elif self.muted:
-                self._tgt_scale = random.uniform(0.998, 1.002)
-                self._tgt_halo  = random.uniform(15, 28)
-            else:
-                self._tgt_scale = random.uniform(1.001, 1.008)
-                self._tgt_halo  = random.uniform(48, 68)
-            self._last_t = now
+        self._tick += 0.05
+        
+        if self.speaking:
+            if self._tick - self._last_voice_tick > random.uniform(0.06, 0.12):
+                self._tgt_scale = random.uniform(1.15, 1.45)
+                self._last_voice_tick = self._tick
+            sp = 0.35
+        elif self.state in ("THINKING", "PROCESSING"):
+            self._tgt_scale = 0.95 + math.sin(self._tick * 3.0) * 0.05
+            sp = 0.12
+        else:
+            self._tgt_scale = 1.0 + math.sin(self._tick * 1.2) * 0.03
+            sp = 0.08
 
-        sp = 0.38 if self.speaking else 0.15
         self._scale += (self._tgt_scale - self._scale) * sp
-        self._halo  += (self._tgt_halo  - self._halo)  * sp
-
-        speeds = [1.3, -0.9, 2.0] if self.speaking else [0.55, -0.35, 0.9]
-        for i, spd in enumerate(speeds):
-            self._rings[i] = (self._rings[i] + spd) % 360
-
-        self._scan  = (self._scan  + (3.0 if self.speaking else 1.3)) % 360
-        self._scan2 = (self._scan2 + (-2.0 if self.speaking else -0.75)) % 360
-
-        fw  = min(self.width(), self.height())
-        lim = fw * 0.74
-        spd = 4.2 if self.speaking else 2.0
-        self._pulses = [r + spd for r in self._pulses if r + spd < lim]
-        if len(self._pulses) < 3 and random.random() < (0.07 if self.speaking else 0.025):
-            self._pulses.append(0.0)
-
-        if self.speaking and random.random() < 0.28:
-            cx, cy = self.width() / 2, self.height() / 2
-            ang = random.uniform(0, 2 * math.pi)
-            r_s = fw * 0.28
-            self._particles.append([
-                cx + math.cos(ang) * r_s, cy + math.sin(ang) * r_s,
-                math.cos(ang) * random.uniform(0.9, 2.4),
-                math.sin(ang) * random.uniform(0.9, 2.4) - 0.4, 1.0,
-            ])
-        self._particles = [
-            [p[0]+p[2], p[1]+p[3], p[2]*0.97, p[3]*0.97, p[4]-0.028]
-            for p in self._particles if p[4] > 0
-        ]
-
-        self._blink_tick += 1
-        if self._blink_tick >= 38:
-            self._blink = not self._blink
-            self._blink_tick = 0
         self.update()
 
     def paintEvent(self, _):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        p.fillRect(self.rect(), qcol(C.BG))
+
+        # Sfondo Scuro Deep Space dinamico
+        p.fillRect(self.rect(), self._theme_bg)
 
         W, H = self.width(), self.height()
         cx, cy = W / 2, H / 2
         fw = min(W, H)
 
-        # grid dots
-        p.setPen(QPen(qcol(C.PRI_GHO), 1))
-        for x in range(0, W, 48):
-            for y in range(0, H, 48):
-                p.drawPoint(x, y)
-
-        r_face = fw * 0.31
-
-        # halo glow
-        for i in range(10):
-            r   = r_face * (1.8 - i * 0.08)
-            frc = 1.0 - i / 10
-            a   = max(0, min(255, int(self._halo * 0.085 * frc)))
-            col = qcol(C.MUTED_C if self.muted else C.PRI, a)
-            p.setPen(QPen(col, 1.5)); p.setBrush(Qt.BrushStyle.NoBrush)
-            p.drawEllipse(QRectF(cx - r, cy - r, r * 2, r * 2))
-
-        # pulse rings
-        for pr in self._pulses:
-            a   = max(0, int(230 * (1.0 - pr / (fw * 0.74))))
-            col = qcol(C.MUTED_C if self.muted else C.PRI, a)
-            p.setPen(QPen(col, 1.5)); p.setBrush(Qt.BrushStyle.NoBrush)
-            p.drawEllipse(QRectF(cx - pr, cy - pr, pr * 2, pr * 2))
-
-        # spinning arc rings
-        for idx, (r_frac, w_r, arc_l, gap) in enumerate(
-            [(0.48, 3, 115, 78), (0.40, 2, 78, 55), (0.32, 1, 56, 40)]
-        ):
-            ring_r = fw * r_frac
-            base   = self._rings[idx]
-            a_val  = max(0, min(255, int(self._halo * (1.0 - idx * 0.18))))
-            col    = qcol(C.MUTED_C if self.muted else C.PRI, a_val)
-            p.setPen(QPen(col, w_r)); p.setBrush(Qt.BrushStyle.NoBrush)
-            angle = base
-            rect  = QRectF(cx - ring_r, cy - ring_r, ring_r * 2, ring_r * 2)
-            while angle < base + 360:
-                p.drawArc(rect, int(angle * 16), int(arc_l * 16))
-                angle += arc_l + gap
-
-        # scanners
-        sr = fw * 0.50
-        sa = min(255, int(self._halo * 1.5))
-        ex = 75 if self.speaking else 44
-        p.setPen(QPen(qcol(C.MUTED_C if self.muted else C.PRI, sa), 2.5))
-        p.setBrush(Qt.BrushStyle.NoBrush)
-        srect = QRectF(cx - sr, cy - sr, sr * 2, sr * 2)
-        p.drawArc(srect, int(self._scan * 16), int(ex * 16))
-        p.setPen(QPen(qcol(C.ACC, sa // 2), 1.5))
-        p.drawArc(srect, int(self._scan2 * 16), int(ex * 16))
-
-        # tick marks
-        t_out, t_in = fw * 0.497, fw * 0.474
-        p.setPen(QPen(qcol(C.PRI, 140), 1))
-        for deg in range(0, 360, 10):
-            rad = math.radians(deg)
-            inn = t_in if deg % 30 == 0 else t_in + 6
-            p.drawLine(
-                QPointF(cx + t_out * math.cos(rad), cy - t_out * math.sin(rad)),
-                QPointF(cx + inn  * math.cos(rad), cy - inn  * math.sin(rad)),
-            )
-
-        # crosshair
-        ch_r, gap_h = fw * 0.51, fw * 0.16
-        p.setPen(QPen(qcol(C.PRI, int(self._halo * 0.5)), 1))
-        p.drawLine(QPointF(cx - ch_r, cy), QPointF(cx - gap_h, cy))
-        p.drawLine(QPointF(cx + gap_h, cy), QPointF(cx + ch_r, cy))
-        p.drawLine(QPointF(cx, cy - ch_r), QPointF(cx, cy - gap_h))
-        p.drawLine(QPointF(cx, cy + gap_h), QPointF(cx, cy + ch_r))
-
-        # corner brackets
-        bl = 24
-        bc = qcol(C.PRI, 210)
-        hl, hr = cx - fw // 2, cx + fw // 2
-        ht, hb = cy - fw // 2, cy + fw // 2
-        p.setPen(QPen(bc, 2))
-        for bx, by, dx, dy in [(hl,ht,1,1),(hr,ht,-1,1),(hl,hb,1,-1),(hr,hb,-1,-1)]:
-            p.drawLine(QPointF(bx, by), QPointF(bx + dx * bl, by))
-            p.drawLine(QPointF(bx, by), QPointF(bx, by + dy * bl))
-
-        # face
-        if self._face_px:
-            fsz    = int(fw * 0.62 * self._scale)
-            scaled = self._face_px.scaled(
-                fsz, fsz,
-                Qt.AspectRatioMode.KeepAspectRatio,
-                Qt.TransformationMode.SmoothTransformation,
-            )
-            p.drawPixmap(int(cx - fsz / 2), int(cy - fsz / 2), scaled)
+        # 1. GESTIONE CROMATICA VINCOLATA AL TEMA ATTIVO
+        if self.muted:
+            target_main, target_sec = QColor("#ff3355"), QColor("#ff6b00")
         else:
-            orb_r = int(fw * 0.27 * self._scale)
-            oc    = (200, 0, 50) if self.muted else (0, 60, 110)
-            for i in range(8, 0, -1):
-                r2  = int(orb_r * i / 8)
-                frc = i / 8
-                a   = max(0, min(255, int(self._halo * 1.1 * frc)))
-                p.setBrush(QBrush(QColor(int(oc[0]*frc), int(oc[1]*frc), int(oc[2]*frc), a)))
-                p.setPen(Qt.PenStyle.NoPen)
-                p.drawEllipse(QRectF(cx - r2, cy - r2, r2 * 2, r2 * 2))
-            p.setPen(QPen(qcol(C.PRI, min(255, int(self._halo * 2))), 1))
-            p.setFont(QFont("Courier New", 13, QFont.Weight.Bold))
-            p.drawText(QRectF(cx - 80, cy - 14, 160, 28),
-                       Qt.AlignmentFlag.AlignCenter, self._assistant_name)
+            # USA SEMPRE I COLORI DEL TEMA SELEZIONATO (SENZA SOVRASCRIVERLI CON L'AZZURRO FISSO)
+            target_main, target_sec = self._theme_main, self._theme_sec
 
-        # particles
-        for pt in self._particles:
-            a = max(0, min(255, int(pt[4] * 255)))
-            p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(QBrush(qcol(C.PRI, a)))
-            p.drawEllipse(QPointF(pt[0], pt[1]), 2.5, 2.5)
+        # Forza l'assegnazione immediata dei colori del tema
+        self._curr_main = target_main
+        self._curr_sec  = target_sec
 
-        # status text
+        # 2. CORNER BRACKETS DINAMICI
+        bracket_pen = QPen(QColor(self._curr_main.red(), self._curr_main.green(), self._curr_main.blue(), 140))
+        bracket_pen.setWidth(2)
+        p.setPen(bracket_pen)
+        b_len, margin = 18, 12
+
+        p.drawLine(margin, margin, margin + b_len, margin)
+        p.drawLine(margin, margin, margin, margin + b_len)
+        p.drawLine(W - margin, margin, W - margin - b_len, margin)
+        p.drawLine(W - margin, margin, W - margin, margin + b_len)
+
+        p.drawLine(margin, H - margin, margin + b_len, H - margin)
+        p.drawLine(margin, H - margin, margin, H - margin - b_len)
+        p.drawLine(W - margin, H - margin, W - margin - b_len, H - margin)
+        p.drawLine(W - margin, H - margin, W - margin, H - margin - b_len)
+
+        # 3. DISAGNO CORE (REATTORE ARC O ORB TEMA)
+        theme_lower = str(self._theme_name).lower()
+        if "ironman" in theme_lower or "iron" in theme_lower or "arc" in theme_lower:
+            self._draw_arc_reactor(p, cx, cy, fw)
+        else:
+            self._draw_standard_orb(p, cx, cy, fw)
+
+        # 4. BADGE STATO
         sy = cy + fw * 0.40
         if self.muted:
-            txt, col = "⊘  MUTED",     qcol(C.MUTED_C)
+            txt, col = "⊘  SYSTEM MUTED", QColor("#ff3355")
         elif self.speaking:
-            txt, col = "●  SPEAKING",  qcol(C.ACC)
-        elif self.state == "THINKING":
-            sym = "◈" if self._blink else "◇"
-            txt, col = f"{sym}  THINKING",   qcol(C.ACC2)
-        elif self.state == "PROCESSING":
-            sym = "▷" if self._blink else "▶"
-            txt, col = f"{sym}  PROCESSING", qcol(C.ACC2)
-        elif self.state == "LISTENING":
-            sym = "●" if self._blink else "○"
-            txt, col = f"{sym}  LISTENING",  qcol(C.GREEN)
+            txt, col = "●  SPEAKING", self._curr_main
+        elif self.state in ("THINKING", "PROCESSING"):
+            txt, col = "◈  PROCESSING...", self._curr_main
         else:
-            sym = "●" if self._blink else "○"
-            txt, col = f"{sym}  {self.state}", qcol(C.PRI)
+            txt, col = f"●  {self.state}", self._curr_main
 
         p.setPen(QPen(col, 1))
-        p.setFont(QFont("Courier New", 11, QFont.Weight.Bold))
-        p.drawText(QRectF(0, sy, W, 26), Qt.AlignmentFlag.AlignCenter, txt)
+        p.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
+        p.drawText(QRectF(0, sy, W, 20), Qt.AlignmentFlag.AlignCenter, txt)
+        
+    def _draw_arc_reactor(self, p: QPainter, cx: float, cy: float, fw: float):
+        """Disegna il Reattore Arc di Tony Stark."""
+        max_r = fw * 0.30 * self._scale
 
-        # waveform
-        wy = sy + 30
-        N, bw = 36, 8
-        wx0 = (W - N * bw) / 2
-        for i in range(N):
-            if self.muted:
-                hgt, cl = 2, qcol(C.MUTED_C)
-            elif self.speaking:
-                hgt = random.randint(3, 20)
-                cl  = qcol(C.PRI) if hgt > 12 else qcol(C.PRI_DIM)
-            else:
-                hgt = int(3 + 2 * math.sin(self._tick * 0.09 + i * 0.6))
-                cl  = qcol(C.BORDER_B)
-            p.fillRect(QRectF(wx0 + i * bw, wy + 20 - hgt, bw - 1, hgt), cl)
+        # A. Glow esterno
+        glow_r = max_r * (1.8 if not self.speaking else 2.2)
+        glow_grad = QRadialGradient(QPointF(cx, cy), glow_r)
+        
+        c_glow = QColor(self._curr_main)
+        c_glow.setAlpha(int(160 + (self._scale - 1.0) * 200) if self.speaking else 120)
+        glow_grad.setColorAt(0.0, c_glow)
+        glow_grad.setColorAt(0.5, QColor(self._curr_main.red(), self._curr_main.green(), self._curr_main.blue(), 40))
+        glow_grad.setColorAt(1.0, QColor(0, 0, 0, 0))
 
+        p.setBrush(QBrush(glow_grad))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.drawEllipse(QPointF(cx, cy), glow_r, glow_r)
+
+        # B. Anello Esterno Oro Stark
+        r_outer = max_r * 0.85
+        p.setPen(QPen(self._curr_sec, 3.0))  # Oro Stark
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawEllipse(QPointF(cx, cy), r_outer, r_outer)
+
+        # C. Anello Interno Ciano/Main
+        r_inner = max_r * 0.60
+        p.setPen(QPen(self._curr_main, 4.0))
+        p.drawEllipse(QPointF(cx, cy), r_inner, r_inner)
+
+        # D. Spicchi Radiali Rotanti (10 Bobine)
+        p.save()
+        p.translate(cx, cy)
+        p.rotate(self._tick * 30.0)
+        
+        p.setPen(QPen(QColor("#ffffff"), 2.5))
+        for i in range(10):
+            angle = i * (2 * math.pi / 10)
+            x1 = r_inner * math.cos(angle)
+            y1 = r_inner * math.sin(angle)
+            x2 = r_outer * math.cos(angle)
+            y2 = r_outer * math.sin(angle)
+            p.drawLine(QPointF(x1, y1), QPointF(x2, y2))
+            
+        p.restore()
+
+        # E. Anello Intermedio Tratteggiato Rotante in Senso Opposto
+        p.save()
+        p.translate(cx, cy)
+        p.rotate(-self._tick * 40.0)
+        p.setPen(QPen(self._curr_sec, 1.5, Qt.PenStyle.DashLine))
+        p.drawEllipse(QPointF(0, 0), max_r * 0.42, max_r * 0.42)
+        p.restore()
+
+        # F. Core Centrale
+        core_r = max_r * 0.28
+        core_grad = QRadialGradient(QPointF(cx, cy), core_r)
+        core_grad.setColorAt(0.0, QColor("#ffffff"))
+        core_grad.setColorAt(0.7, self._curr_main)
+        core_grad.setColorAt(1.0, QColor(0, 0, 0, 0))
+        p.setBrush(QBrush(core_grad))
+        p.setPen(QPen(QColor("#ffffff"), 1.5))
+        p.drawEllipse(QPointF(cx, cy), core_r, core_r)
+
+    def _draw_standard_orb(self, p: QPainter, cx: float, cy: float, fw: float):
+        """Disegna l'Orb Volumetrico dinamico adattato ai colori del tema attivo."""
+        core_r = fw * 0.16 * self._scale
+
+        # Glow d'Ambiente
+        glow_r = core_r * (3.0 if not self.speaking else 3.6)
+        glow_grad = QRadialGradient(QPointF(cx, cy), glow_r)
+        
+        c_amb = QColor(self._curr_main)
+        c_amb.setAlpha(int(60 + (self._scale - 1.0) * 350) if self.speaking else 60)
+        glow_grad.setColorAt(0.0, c_amb)
+        
+        c_sec_amb = QColor(self._curr_sec)
+        c_sec_amb.setAlpha(30)
+        glow_grad.setColorAt(0.55, c_sec_amb)
+        glow_grad.setColorAt(1.0, QColor(0, 0, 0, 0))
+
+        p.setBrush(QBrush(glow_grad))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.drawEllipse(QPointF(cx, cy), glow_r, glow_r)
+
+        # Sfera Centrale (Usa i colori dinamici del tema)
+        body_grad = QRadialGradient(QPointF(cx, cy), core_r)
+        body_grad.setColorAt(0.0, QColor("#ffffff"))
+        c_mid = QColor(self._curr_main)
+        c_mid.setAlpha(240)
+        body_grad.setColorAt(0.35, c_mid)
+        c_edge = QColor(self._curr_sec)
+        c_edge.setAlpha(180)
+        body_grad.setColorAt(0.75, c_edge)
+        body_grad.setColorAt(1.0, QColor(0, 0, 0, 0))
+
+        p.setBrush(QBrush(body_grad))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.drawEllipse(QPointF(cx, cy), core_r, core_r)
+
+        # Hotspot Centrale
+        center_r = core_r * 0.35
+        center_grad = QRadialGradient(QPointF(cx, cy), center_r)
+        center_grad.setColorAt(0.0, QColor("#ffffff"))
+        c_c_edge = QColor(self._curr_main)
+        c_c_edge.setAlpha(255)
+        center_grad.setColorAt(0.8, c_c_edge)
+        center_grad.setColorAt(1.0, QColor(0, 0, 0, 0))
+
+        p.setBrush(QBrush(center_grad))
+        p.drawEllipse(QPointF(cx, cy), center_r, center_r)
+        
 class MetricBar(QWidget):
 
     def __init__(self, label: str, color: str = C.PRI, parent=None):
@@ -620,8 +961,9 @@ class MetricBar(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         W, H = self.width(), self.height()
 
-        p.setBrush(QBrush(qcol(C.PANEL2)))
-        p.setPen(QPen(qcol(C.BORDER_A), 1))
+        # Sfondo Slate minimalista
+        p.setBrush(QBrush(QColor("#131722")))
+        p.setPen(QPen(QColor("#1f293d"), 1))
         p.drawRoundedRect(QRectF(1, 1, W - 2, H - 2), 4, 4)
 
         bar_h   = 4
@@ -630,14 +972,14 @@ class MetricBar(QWidget):
         bar_x   = 6
         fill_w  = int(bar_w * self._value / 100)
 
-        p.setBrush(QBrush(qcol(C.BAR_BG)))
+        p.setBrush(QBrush(QColor("#0b0e14")))
         p.setPen(Qt.PenStyle.NoPen)
         p.drawRoundedRect(QRectF(bar_x, bar_y, bar_w, bar_h), 2, 2)
 
         if self._value > 85:
-            bar_col = qcol(C.RED)
+            bar_col = QColor("#ff3355")
         elif self._value > 65:
-            bar_col = qcol(C.ACC)
+            bar_col = QColor("#ffcc00")
         else:
             bar_col = qcol(self._color)
 
@@ -645,12 +987,14 @@ class MetricBar(QWidget):
             p.setBrush(QBrush(bar_col))
             p.drawRoundedRect(QRectF(bar_x, bar_y, fill_w, bar_h), 2, 2)
 
-        p.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
-        p.setPen(QPen(qcol(C.TEXT_DIM), 1))
-        p.drawText(QRectF(8, 5, 50, 14), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self._label)
+        # Label della metrica in Segoe UI (es. CPU)
+        p.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
+        p.setPen(QPen(QColor("#8a99b5"), 1))
+        p.drawText(QRectF(8, 4, 50, 14), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, self._label)
 
-        p.setFont(QFont("Courier New", 9, QFont.Weight.Bold))
-        p.setPen(QPen(bar_col if self._text != "--" else qcol(C.TEXT_DIM), 1))
+        # Valore percentuale in Consolas (es. 17%)
+        p.setFont(QFont("Consolas", 8, QFont.Weight.Bold))
+        p.setPen(QPen(bar_col if self._text != "--" else QColor("#5a657b"), 1))
         p.drawText(QRectF(0, 4, W - 6, 16), Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter, self._text)
 
 class LogWidget(QTextEdit):
@@ -659,25 +1003,34 @@ class LogWidget(QTextEdit):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setReadOnly(True)
-        self.setFont(QFont("Courier New", 9))
+        self.setFont(QFont("Consolas", 9))
         self.setStyleSheet(f"""
             QTextEdit {{
-                background: {C.PANEL};
-                color: {C.TEXT};
-                border: 1px solid {C.BORDER};
-                border-radius: 4px;
-                padding: 6px;
-                selection-background-color: {C.PRI_GHO};
+                background-color: #0b0e14;
+                color: #e2e8f0;
+                border: 1px solid #1f293d;
+                border-radius: 6px;
+                padding: 10px;
+                selection-background-color: #1c2333;
+                selection-color: #00f0ff;
             }}
             QScrollBar:vertical {{
-                background: {C.BG};
-                width: 8px;
+                background: #0b0e14;
+                width: 6px;
                 border: none;
+                margin: 2px;
             }}
             QScrollBar::handle:vertical {{
-                background: {C.BORDER_B};
-                border-radius: 4px;
+                background: #1f293d;
+                border-radius: 3px;
                 min-height: 20px;
+            }}
+            QScrollBar::handle:vertical:hover {{
+                background: #00f0ff;
+            }}
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+                border: none;
+                background: none;
             }}
         """)
         self._queue: list[str] = []
@@ -707,25 +1060,29 @@ class LogWidget(QTextEdit):
         self._pos    = 0
         tl = self._text.lower()
         _ai_pfx = f"{self._ai_name_lc}:"
-        if   tl.startswith("you:"):                              self._tag = "you"
+        if   tl.startswith("you:"):                               self._tag = "you"
         elif tl.startswith(_ai_pfx) or tl.startswith("jarvis:"): self._tag = "ai"
         elif tl.startswith("file:"):                             self._tag = "file"
         elif "err" in tl:                                        self._tag = "err"
         else:                                                    self._tag = "sys"
-        self._tmr.start(6)
+        self._tmr.start(4)  # Leggermente più veloce per una digitazione istantanea
 
     def _step(self):
         if self._pos < len(self._text):
             ch  = self._text[self._pos]
             cur = self.textCursor()
             fmt = cur.charFormat()
-            col = {
-                "you":  qcol(C.WHITE),
-                "ai":   qcol(C.PRI),
-                "err":  qcol(C.RED),
-                "file": qcol(C.GREEN),
-                "sys":  qcol(C.ACC2),
-            }.get(self._tag, qcol(C.TEXT))
+            
+            # Mappatura dei colori della nuova palette Cyberpunk
+            col_map = {
+                "you":  QColor("#e2e8f0"), # Bianco pulito
+                "ai":   QColor("#00f0ff"), # Cyan Neon
+                "err":  QColor("#ff3355"), # Rosso
+                "file": QColor("#00ff88"), # Verde Neon
+                "sys":  QColor("#a142ff"), # Viola Elettrico
+            }
+            col = col_map.get(self._tag, QColor("#8a99b5"))
+            
             fmt.setForeground(QBrush(col))
             cur.movePosition(cur.MoveOperation.End)
             cur.insertText(ch, fmt)
@@ -739,7 +1096,7 @@ class LogWidget(QTextEdit):
             cur.insertText("\n")
             self.setTextCursor(cur)
             self.ensureCursorVisible()
-            QTimer.singleShot(20, self._next)
+            QTimer.singleShot(15, self._next)
 
 _FILE_ICONS = {
     "image":   ("🖼", "#00d4ff"), "video":   ("🎬", "#ff6b00"),
@@ -852,6 +1209,12 @@ class FileDropZone(QWidget):
         self._canvas.update()
         self.file_selected.emit(path)
 
+        # Invocazione automatica del menu Smart Drop sulle finestre reali
+        try:
+            from actions.smart_drop_handler import process_dropped_file
+            process_dropped_file(path, parent_window=self.window())
+        except Exception as e:
+            print(f"[SmartDrop Error] Impossibile aprire il menu d'azione: {e}")
 
 class _DropCanvas(QWidget):
     def __init__(self, zone: FileDropZone):
@@ -863,52 +1226,57 @@ class _DropCanvas(QWidget):
         p.setRenderHint(QPainter.RenderHint.Antialiasing)
         z    = self._z
         W, H = self.width(), self.height()
-        pad  = 6
+        pad  = 4
         rect = QRectF(pad, pad, W - pad * 2, H - pad * 2)
 
-        bg_col = qcol("#001a24" if z._drag_over else ("#001218" if z._hovering else C.PANEL))
-        p.setBrush(QBrush(bg_col)); p.setPen(Qt.PenStyle.NoPen)
-        p.drawRoundedRect(rect, 6, 6)
+        # Sfondo Slate Scuro dinamico
+        bg_col = QColor("#002433" if z._drag_over else ("#131722" if z._hovering else "#0b0e14"))
+        p.setBrush(QBrush(bg_col))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.drawRoundedRect(rect, 4, 4)
 
-        if z._current_file:   border_col = qcol(C.GREEN, 200)
-        elif z._drag_over:    border_col = qcol(C.PRI, 230)
-        elif z._hovering:     border_col = qcol(C.BORDER_B, 200)
-        else:                 border_col = qcol(C.BORDER, 160)
+        # Colore bordo in base allo stato
+        if z._current_file:   border_col = QColor("#00ff88")
+        elif z._drag_over:    border_col = QColor("#00f0ff")
+        elif z._hovering:     border_col = QColor("#7000ff")
+        else:                 border_col = QColor("#1f293d")
 
-        pen = QPen(border_col, 1.5, Qt.PenStyle.DashLine)
+        pen = QPen(border_col, 1.2, Qt.PenStyle.DashLine if not z._current_file else Qt.PenStyle.SolidLine)
         pen.setDashOffset(z._dash_offset)
-        p.setPen(pen); p.setBrush(Qt.BrushStyle.NoBrush)
-        p.drawRoundedRect(rect, 6, 6)
+        p.setPen(pen)
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawRoundedRect(rect, 4, 4)
 
         if z._current_file:   self._paint_file(p, W, H)
         elif z._drag_over:    self._paint_drag_over(p, W, H)
         else:                 self._paint_idle(p, W, H, z._hovering)
 
     def _paint_idle(self, p, W, H, hover):
-        cx, cy = W / 2, H / 2
-        col = qcol(C.PRI_DIM if not hover else C.PRI)
-        p.setPen(QPen(col, 2)); p.setBrush(Qt.BrushStyle.NoBrush)
-        p.drawLine(QPointF(cx, cy - 14), QPointF(cx, cy + 4))
-        p.drawLine(QPointF(cx - 8, cy - 6), QPointF(cx, cy - 14))
-        p.drawLine(QPointF(cx + 8, cy - 6), QPointF(cx, cy - 14))
-        p.drawLine(QPointF(cx - 14, cy + 4), QPointF(cx + 14, cy + 4))
-        p.setFont(QFont("Courier New", 8))
-        p.setPen(QPen(qcol(C.PRI_DIM if not hover else C.TEXT), 1))
-        p.drawText(QRectF(0, cy + 8, W, 16), Qt.AlignmentFlag.AlignCenter,
-                   "Drop file here  or  Click to Browse")
-        p.setFont(QFont("Courier New", 7))
-        p.setPen(QPen(qcol("#1a4a5a"), 1))
-        p.drawText(QRectF(0, cy + 24, W, 14), Qt.AlignmentFlag.AlignCenter,
-                   "Images · Video · Audio · PDF · Docs · Code · Data")
+        cx, cy = W / 2, H / 2 - 6
+        col = QColor("#00f0ff" if hover else "#5a657b")
+        
+        # Icona Upload Vettoriale
+        p.setPen(QPen(col, 1.8))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        p.drawLine(QPointF(cx, cy - 10), QPointF(cx, cy + 6))
+        p.drawLine(QPointF(cx - 6, cy - 4), QPointF(cx, cy - 10))
+        p.drawLine(QPointF(cx + 6, cy - 4), QPointF(cx, cy - 10))
+        p.drawLine(QPointF(cx - 10, cy + 6), QPointF(cx + 10, cy + 6))
+        
+        # Testo minimal
+        p.setFont(QFont("Consolas", 8, QFont.Weight.Bold))
+        p.setPen(QPen(QColor("#e2e8f0" if hover else "#8a99b5"), 1))
+        p.drawText(QRectF(0, cy + 12, W, 16), Qt.AlignmentFlag.AlignCenter, "DROP FILE  OR  CLICK TO BROWSE")
+        
+        p.setFont(QFont("Consolas", 7))
+        p.setPen(QPen(QColor("#5a657b"), 1))
+        p.drawText(QRectF(0, cy + 28, W, 14), Qt.AlignmentFlag.AlignCenter, "Images · Video · Audio · PDF · Docs · Code · Data")
 
     def _paint_drag_over(self, p, W, H):
         cx, cy = W / 2, H / 2
-        p.setFont(QFont("Courier New", 20))
-        p.setPen(QPen(qcol(C.PRI), 1))
-        p.drawText(QRectF(0, cy - 24, W, 32), Qt.AlignmentFlag.AlignCenter, "⬇")
-        p.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
-        p.setPen(QPen(qcol(C.PRI), 1))
-        p.drawText(QRectF(0, cy + 12, W, 16), Qt.AlignmentFlag.AlignCenter, "Release to load")
+        p.setFont(QFont("Consolas", 16, QFont.Weight.Bold))
+        p.setPen(QPen(QColor("#00f0ff"), 1))
+        p.drawText(QRectF(0, cy - 16, W, 24), Qt.AlignmentFlag.AlignCenter, "[ RELEASE TO LOAD ]")
 
     def _paint_file(self, p, W, H):
         path = Path(self._z._current_file)
@@ -917,36 +1285,27 @@ class _DropCanvas(QWidget):
         size_str = _fmt_size(path.stat().st_size)
         ext_str  = path.suffix.upper().lstrip(".") or "FILE"
 
-        block_x, block_w = 10, 60
-        p.setFont(QFont("Segoe UI Emoji", 22) if _OS == "Windows" else QFont("Arial", 22))
+        block_x, block_w = 10, 45
+        p.setFont(QFont("Segoe UI Emoji", 18) if _OS == "Windows" else QFont("Arial", 18))
         p.setPen(QPen(qcol(icon_col), 1))
         p.drawText(QRectF(block_x, 0, block_w, H), Qt.AlignmentFlag.AlignCenter, icon)
 
-        tx = block_x + block_w + 6
-        tw = W - tx - 38
+        tx = block_x + block_w + 4
+        tw = W - tx - 36
 
-        p.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
-        p.setPen(QPen(qcol(C.WHITE), 1))
-        name = path.name if len(path.name) <= 34 else path.name[:31] + "..."
-        p.drawText(QRectF(tx, H * 0.18, tw, 16),
-                   Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, name)
+        p.setFont(QFont("Consolas", 8, QFont.Weight.Bold))
+        p.setPen(QPen(QColor("#00ff88"), 1))
+        name = path.name if len(path.name) <= 32 else path.name[:29] + "..."
+        p.drawText(QRectF(tx, H * 0.18, tw, 16), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, name)
 
-        p.setFont(QFont("Courier New", 7))
-        p.setPen(QPen(qcol(C.TEXT_DIM), 1))
-        p.drawText(QRectF(tx, H * 0.18 + 18, tw, 14),
-                   Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-                   f"{ext_str}  ·  {size_str}")
+        p.setFont(QFont("Consolas", 7))
+        p.setPen(QPen(QColor("#8a99b5"), 1))
+        p.drawText(QRectF(tx, H * 0.18 + 16, tw, 14), Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, f"{ext_str}  ·  {size_str}")
 
-        p.setFont(QFont("Courier New", 6))
-        p.setPen(QPen(qcol("#1e5c6a"), 1))
-        par = str(path.parent)
-        if len(par) > 42: par = "…" + par[-41:]
-        p.drawText(QRectF(tx, H * 0.18 + 34, tw, 12),
-                   Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter, par)
-
-        p.setFont(QFont("Courier New", 9, QFont.Weight.Bold))
-        p.setPen(QPen(qcol(C.RED, 180), 1))
-        p.drawText(QRectF(W - 34, 0, 28, H), Qt.AlignmentFlag.AlignCenter, "✕")
+        # Bottone d'eliminazione ✕
+        p.setFont(QFont("Consolas", 10, QFont.Weight.Bold))
+        p.setPen(QPen(QColor("#ff3355"), 1))
+        p.drawText(QRectF(W - 30, 0, 24, H), Qt.AlignmentFlag.AlignCenter, "✕")
 
     def mousePressEvent(self, e):
         z = self._z
@@ -1852,7 +2211,7 @@ class MainWindow(QMainWindow):
         body.addWidget(self._right_panel, stretch=0)
 
         root.addLayout(body, stretch=1)
-        root.addWidget(self._build_footer())
+        
 
         # Quick-access drawer (floating overlay, built after central widget layout is done)
         self._quick_drawer = self._build_quick_drawer()
@@ -1905,6 +2264,9 @@ class MainWindow(QMainWindow):
 
         sc_intr = QShortcut(QKeySequence("Escape"), self)
         sc_intr.activated.connect(self._do_interrupt)
+
+        self._glitter = GlitterOverlay(self, count=80)
+        self._glitter.setGeometry(0, 0, self.width(), self.height())
 
     def _show_camera_frame(self, img_bytes: bytes):
         """Slot — display camera preview overlay (main thread)."""
@@ -2420,20 +2782,27 @@ class MainWindow(QMainWindow):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         cw = self.centralWidget()
+
+        # 1. Overlay Glitter — Copre l'intera finestra (in primo piano)
+        if hasattr(self, "_glitter") and self._glitter:
+            self._glitter.setGeometry(0, 0, self.width(), self.height())
+            self._glitter.raise_()
+
+        # 2. Overlay standard centrati
         if self._overlay and self._overlay.isVisible():
             ow, oh = 460, 390
             self._overlay.setGeometry(
                 (cw.width()  - ow) // 2,
                 (cw.height() - oh) // 2,
                 ow, oh,
-            )
+        )
         if self._remote_overlay and self._remote_overlay.isVisible():
             ow, oh = RemoteKeyOverlay._OW, RemoteKeyOverlay._OH
             self._remote_overlay.setGeometry(
                 (cw.width()  - ow) // 2,
                 (cw.height() - oh) // 2,
                 ow, oh,
-            )
+        )
         if self._customize_overlay and self._customize_overlay.isVisible():
             ow, oh = CustomizeOverlay._OW, CustomizeOverlay._OH
             self._customize_overlay.setGeometry(
@@ -2441,6 +2810,7 @@ class MainWindow(QMainWindow):
                 (cw.height() - oh) // 2,
                 ow, oh,
             )
+
         # Camera preview — bottom-right corner of the center/HUD area
         pw = _CameraPreview._W
         ph = self._cam_preview.height() or _CameraPreview._H
@@ -2449,9 +2819,11 @@ class MainWindow(QMainWindow):
             cw.height() - ph - 28,
             pw, ph,
         )
+
         # Clipboard panel — bottom-center
         if hasattr(self, '_clipboard_panel') and self._clipboard_panel.isVisible():
             self._position_clipboard_panel()
+
         # Quick drawer — reposition if open
         if hasattr(self, '_quick_drawer') and self._quick_drawer.isVisible():
             self._position_quick_drawer()
@@ -2509,292 +2881,366 @@ class MainWindow(QMainWindow):
 
     def _build_header(self) -> QWidget:
         w = QWidget()
-        w.setFixedHeight(54)
-        w.setStyleSheet(f"background: {C.DARK}; border-bottom: 1px solid {C.BORDER_B};")
+        w.setFixedHeight(50)
         lay = QHBoxLayout(w)
-        lay.setContentsMargins(16, 0, 16, 0)
+        lay.setContentsMargins(12, 4, 12, 4)
 
-        def _badge(txt, color=C.TEXT_MED):
-            l = QLabel(txt)
-            l.setFont(QFont("Courier New", 8))
-            l.setStyleSheet(f"color: {color}; background: transparent;")
-            return l
+        # Gestione sicura di _drawer_btn
+        if not hasattr(self, "_drawer_btn") or self._drawer_btn is None:
+            self._drawer_btn = QPushButton("⚙")
+            self._drawer_btn.setFixedSize(32, 32)
+            self._drawer_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            self._drawer_btn.setCheckable(True)
+            if hasattr(self, "_toggle_drawer"):
+                self._drawer_btn.clicked.connect(self._toggle_drawer)
 
-        lay.addWidget(_badge("MARK XLIX", C.PRI_DIM))
-        lay.addSpacing(8)
-        self._drawer_btn = QPushButton("⚙")
-        self._drawer_btn.setFixedSize(26, 26)
-        self._drawer_btn.setFont(QFont("Courier New", 11))
-        self._drawer_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._drawer_btn.setToolTip("Settings & Controls")
-        self._drawer_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent; color: {C.TEXT_DIM};
-                border: 1px solid {C.BORDER}; border-radius: 4px;
-            }}
-            QPushButton:hover {{ color: {C.PRI}; border-color: {C.PRI_DIM}; }}
-            QPushButton:checked {{ color: {C.PRI}; border-color: {C.PRI}; background: {C.PRI_GHO}; }}
-        """)
-        self._drawer_btn.setCheckable(True)
-        self._drawer_btn.clicked.connect(self._toggle_drawer)
+        self._drawer_btn.setFont(QFont("Segoe UI", 11, QFont.Weight.Bold))
         lay.addWidget(self._drawer_btn)
         lay.addStretch()
 
-        mid = QVBoxLayout(); mid.setSpacing(1)
+        # Titolo centrale Cyberpunk
+        mid = QVBoxLayout()
+        mid.setSpacing(1)
         _disp = self._assistant_name.upper()
+
         self._title_lbl = QLabel(_disp)
         self._title_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._title_lbl.setFont(QFont("Courier New", 17, QFont.Weight.Bold))
-        self._title_lbl.setStyleSheet(f"color: {C.PRI}; background: transparent;")
+        self._title_lbl.setFont(QFont("Segoe UI", 15, QFont.Weight.Bold))
         mid.addWidget(self._title_lbl)
+
         _sub_text = ("Just A Rather Very Intelligent System"
                      if _disp in ("JARVIS", "J.A.R.V.I.S")
                      else "Personal AI Assistant")
         self._sub_lbl = QLabel(_sub_text)
         self._sub_lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._sub_lbl.setFont(QFont("Courier New", 7))
-        self._sub_lbl.setStyleSheet(f"color: {C.PRI_DIM}; background: transparent;")
+        self._sub_lbl.setFont(QFont("Segoe UI", 8, QFont.Weight.Normal))
         mid.addWidget(self._sub_lbl)
+
         lay.addLayout(mid)
         lay.addStretch()
 
-        right_col = QVBoxLayout(); right_col.setSpacing(2)
+        # Orologio e data in alto a destra
+        right_col = QVBoxLayout()
+        right_col.setSpacing(1)
+
         self._clock_lbl = QLabel("00:00:00")
-        self._clock_lbl.setFont(QFont("Courier New", 14, QFont.Weight.Bold))
-        self._clock_lbl.setStyleSheet(f"color: {C.PRI}; background: transparent;")
+        self._clock_lbl.setFont(QFont("Segoe UI", 13, QFont.Weight.Bold))
         self._clock_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
         right_col.addWidget(self._clock_lbl)
+
         self._date_lbl = QLabel("")
-        self._date_lbl.setFont(QFont("Courier New", 7))
-        self._date_lbl.setStyleSheet(f"color: {C.TEXT_DIM}; background: transparent;")
+        self._date_lbl.setFont(QFont("Segoe UI", 8))
         self._date_lbl.setAlignment(Qt.AlignmentFlag.AlignRight)
         right_col.addWidget(self._date_lbl)
+
         lay.addLayout(right_col)
+
+        # Applica immediatamente la palette di colori iniziale agli elementi dell'header
+        self._update_header_styles()
         return w
 
+    def _update_header_styles(self):
+        """Aggiorna lo stile grafico degli elementi dell'header in base alle variabili di tema attive."""
+        # Se non sono ancora definite le variabili di tema, imposta i valori di default (Cyan Cyberpunk)
+        accent   = getattr(self, "c_accent", "#00f0ff")
+        bg_btn   = getattr(self, "c_bg_btn", "#131722")
+        bg_hover = getattr(self, "c_bg_hover", "#1c2333")
+        border   = getattr(self, "c_border", "#1f293d")
+        subtext  = getattr(self, "c_subtext", "#5a657b")
+
+        if hasattr(self, "_drawer_btn") and self._drawer_btn:
+            self._drawer_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: {bg_btn}; color: {accent};
+                    border: 1px solid {border}; border-radius: 4px;
+                }}
+                QPushButton:hover {{
+                    background: {bg_hover}; border: 1px solid {accent};
+                }}
+                QPushButton:checked {{
+                    color: {accent}; border-color: {accent}; background: {bg_hover};
+                }}
+            """)
+
+        if hasattr(self, "_title_lbl"):
+            self._title_lbl.setStyleSheet(f"color: {accent}; background: transparent; letter-spacing: 3px;")
+        if hasattr(self, "_sub_lbl"):
+            self._sub_lbl.setStyleSheet(f"color: {subtext}; background: transparent; letter-spacing: 1px;")
+        if hasattr(self, "_clock_lbl"):
+            self._clock_lbl.setStyleSheet(f"color: {accent}; background: transparent; letter-spacing: 1px;")
+        if hasattr(self, "_date_lbl"):
+            self._date_lbl.setStyleSheet(f"color: {subtext}; background: transparent;")
+    
     def _tick_clock(self):
         self._clock_lbl.setText(time.strftime("%H:%M:%S"))
         self._date_lbl.setText(time.strftime("%a %d %b %Y"))
 
     def _build_left_panel(self) -> QWidget:
-        w = QWidget()
-        w.setFixedWidth(_LEFT_W)
-        w.setStyleSheet(f"background: {C.DARK}; border-right: 1px solid {C.BORDER};")
-        lay = QVBoxLayout(w)
-        lay.setContentsMargins(8, 10, 8, 10)
+        self._left_panel_w = QWidget()
+        self._left_panel_w.setFixedWidth(_LEFT_W)
+
+        lay = QVBoxLayout(self._left_panel_w)
+        lay.setContentsMargins(10, 10, 10, 10)
         lay.setSpacing(6)
 
-        hdr = QLabel("◈ SYS MONITOR")
-        hdr.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
-        hdr.setStyleSheet(f"color: {C.PRI}; background: transparent; "
-                          f"border-bottom: 1px solid {C.BORDER}; padding-bottom: 4px;")
-        lay.addWidget(hdr)
+        # Header Tattico
+        self._sys_hdr_lbl = QLabel("▶ SYS MONITOR")
+        self._sys_hdr_lbl.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
+        lay.addWidget(self._sys_hdr_lbl)
         lay.addSpacing(2)
 
-        self._bar_cpu = MetricBar("CPU", C.PRI)
-        self._bar_mem = MetricBar("MEM", C.ACC2)
-        self._bar_net = MetricBar("NET", C.GREEN)
-        self._bar_gpu = MetricBar("GPU", C.ACC)
-        self._bar_tmp = MetricBar("TMP", "#ff6688")
+        # Metric Bars (CPU, MEM, NET, GPU, TMP)
+        # Se la classe MetricBar accetta aggiornamenti dinamici, la inizializziamo normalmente
+        self._bar_cpu = MetricBar("CPU", getattr(C, "PRI", "#00f0ff"))
+        self._bar_mem = MetricBar("MEM", getattr(C, "ACC2", "#00ff88"))
+        self._bar_net = MetricBar("NET", getattr(C, "GREEN", "#00ff88"))
+        self._bar_gpu = MetricBar("GPU", getattr(C, "ACC", "#7000ff"))
+        self._bar_tmp = MetricBar("TMP", "#ff3355")
 
-        for bar in [self._bar_cpu, self._bar_mem, self._bar_net,
-                    self._bar_gpu, self._bar_tmp]:
+        for bar in [self._bar_cpu, self._bar_mem, self._bar_net, self._bar_gpu, self._bar_tmp]:
             lay.addWidget(bar)
 
         lay.addSpacing(4)
 
-        info_panel = QWidget()
-        info_panel.setStyleSheet(
-            f"background: {C.PANEL2}; border: 1px solid {C.BORDER}; border-radius: 4px;"
-        )
-        ip_lay = QVBoxLayout(info_panel)
-        ip_lay.setContentsMargins(6, 5, 6, 5)
+        # Box Uptime & Processi
+        self._info_panel = QWidget()
+        ip_lay = QVBoxLayout(self._info_panel)
+        ip_lay.setContentsMargins(8, 6, 8, 6)
         ip_lay.setSpacing(3)
 
         self._uptime_lbl = QLabel("UP  --:--")
-        self._uptime_lbl.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
-        self._uptime_lbl.setStyleSheet(f"color: {C.GREEN}; background: transparent; border: none;")
+        self._uptime_lbl.setFont(QFont("Consolas", 8, QFont.Weight.Bold))
         ip_lay.addWidget(self._uptime_lbl)
 
         self._proc_lbl = QLabel("PROC  --")
-        self._proc_lbl.setFont(QFont("Courier New", 8))
-        self._proc_lbl.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent; border: none;")
+        self._proc_lbl.setFont(QFont("Consolas", 8))
         ip_lay.addWidget(self._proc_lbl)
 
         os_name = {"Windows": "WIN", "Darwin": "macOS", "Linux": "LINUX"}.get(_OS, _OS.upper())
-        os_lbl = QLabel(f"OS  {os_name}")
-        os_lbl.setFont(QFont("Courier New", 8))
-        os_lbl.setStyleSheet(f"color: {C.ACC2}; background: transparent; border: none;")
-        ip_lay.addWidget(os_lbl)
+        self._os_lbl = QLabel(f"OS  {os_name}")
+        self._os_lbl.setFont(QFont("Consolas", 8))
+        ip_lay.addWidget(self._os_lbl)
 
-        lay.addWidget(info_panel)
-        lay.addSpacing(4)
-
+        lay.addWidget(self._info_panel)
         lay.addStretch()
 
-        for txt, col in [
-            ("AI CORE\nACTIVE",  C.GREEN),
-            ("SEC\nCLEARED",     C.PRI),
-            ("PROTOCOL\nXLIX",   C.TEXT_DIM),
-        ]:
+        # Status Badges In basso (Pill)
+        self._badge_labels = []
+        badges_data = [
+            ("● AI CORE ACTIVE", "#00ff88", "#0a1c18", "#124a3e"),
+            ("◈ SEC CLEARED",    "#00f0ff", "#091b24", "#0f3c52"),
+            ("◇ PROTOCOL XLIX",  "#7000ff", "#150a24", "#321252")
+        ]
+        for txt, fg, bg, bd in badges_data:
             lbl = QLabel(txt)
-            lbl.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+            lbl.setFont(QFont("Segoe UI", 7, QFont.Weight.Bold))
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            lbl.setStyleSheet(
-                f"color: {col}; background: {C.PANEL2};"
-                f"border: 1px solid {C.BORDER_A}; border-radius: 3px; padding: 4px;"
-            )
+            lbl.setProperty("default_style", (fg, bg, bd)) # Salva i colori base
             lay.addWidget(lbl)
+            self._badge_labels.append(lbl)
 
-        return w
+        # Applica subito lo stile corrente
+        self._update_left_panel_styles()
+        return self._left_panel_w
+
+    def _update_left_panel_styles(self):
+        """Aggiorna lo stile del pannello laterale sinistro in base al tema attivo."""
+        bg_main  = getattr(self, "c_bg_main", "#0b0e14")
+        bg_card  = getattr(self, "c_bg_card", "#131722")
+        border   = getattr(self, "c_border", "#1f293d")
+        accent   = getattr(self, "c_accent", "#00f0ff")
+        subtext  = getattr(self, "c_subtext", "#8a99b5")
+
+        if hasattr(self, "_left_panel_w"):
+            self._left_panel_w.setStyleSheet(f"background: {bg_main}; border-right: 1px solid {border};")
+
+        if hasattr(self, "_sys_hdr_lbl"):
+            self._sys_hdr_lbl.setStyleSheet(f"color: {accent}; background: transparent; letter-spacing: 1px;")
+
+        if hasattr(self, "_info_panel"):
+            self._info_panel.setStyleSheet(f"""
+                background: {bg_card};
+                border: 1px solid {border};
+                border-radius: 6px;
+            """)
+
+        if hasattr(self, "_uptime_lbl"):
+            self._uptime_lbl.setStyleSheet(f"color: {accent}; background: transparent; border: none;")
+
+        if hasattr(self, "_proc_lbl"):
+            self._proc_lbl.setStyleSheet(f"color: {subtext}; background: transparent; border: none;")
+
+        if hasattr(self, "_os_lbl"):
+            self._os_lbl.setStyleSheet(f"color: {accent}; background: transparent; border: none;")
+
+        # Badges in basso
+        if hasattr(self, "_badge_labels"):
+            for lbl in self._badge_labels:
+                fg, bg, bd = lbl.property("default_style")
+                # Se siamo su un tema diverso da Cyberpunk, addolciamo i colori di sfondo delle pillole
+                if accent != "#00f0ff":
+                    lbl.setStyleSheet(f"""
+                        color: {accent}; background: {bg_card};
+                        border: 1px solid {border}; border-radius: 4px; padding: 5px 2px;
+                    """)
+                else:
+                    lbl.setStyleSheet(f"""
+                        color: {fg}; background: {bg};
+                        border: 1px solid {bd}; border-radius: 4px; padding: 5px 2px;
+                    """)
+    
     def _build_right_panel(self) -> QWidget:
-        w = QWidget()
-        w.setFixedWidth(_RIGHT_W)
-        w.setStyleSheet(f"background: {C.DARK}; border-left: 1px solid {C.BORDER};")
-        lay = QVBoxLayout(w)
-        lay.setContentsMargins(8, 8, 8, 8)
-        lay.setSpacing(6)
+        self._right_panel_w = QWidget()
+        self._right_panel_w.setFixedWidth(_RIGHT_W)
 
+        lay = QVBoxLayout(self._right_panel_w)
+        lay.setContentsMargins(10, 10, 10, 10)
+        lay.setSpacing(8)
+
+        # Tracciamo tutte le etichette di sezione per aggiornarne il colore a runtime
+        self._right_sec_labels = []
         def _sec(txt):
-            l = QLabel(f"▸ {txt}")
-            l.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
-            l.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent;")
+            l = QLabel(f"▶ {txt}")
+            l.setFont(QFont("Consolas", 8, QFont.Weight.Bold))
+            self._right_sec_labels.append(l)
             return l
 
+        # 1. Activity Log
         lay.addWidget(_sec("ACTIVITY LOG"))
         self._log = LogWidget()
         lay.addWidget(self._log, stretch=1)
 
-        sep = QFrame(); sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet(f"color: {C.BORDER}; margin: 2px 0;")
-        lay.addWidget(sep)
-
+        # 2. File Upload Zone
         lay.addWidget(_sec("FILE UPLOAD"))
         self._drop_zone = FileDropZone()
+        self._drop_zone.setFixedHeight(65)
         self._drop_zone.file_selected.connect(self._on_file_selected)
         lay.addWidget(self._drop_zone)
 
         self._file_hint = QLabel("No file loaded — drop or click above to upload")
-        self._file_hint.setFont(QFont("Courier New", 7))
-        self._file_hint.setStyleSheet(f"color: {C.TEXT_MED}; background: transparent;")
+        self._file_hint.setFont(QFont("Consolas", 7))
         self._file_hint.setWordWrap(True)
         lay.addWidget(self._file_hint)
 
-        sep2 = QFrame(); sep2.setFrameShape(QFrame.Shape.HLine)
-        sep2.setStyleSheet(f"color: {C.BORDER}; margin: 2px 0;")
-        lay.addWidget(sep2)
-
+        # 3. Command Input
         lay.addWidget(_sec("COMMAND INPUT"))
         lay.addLayout(self._build_input_row())
 
-        self._interrupt_btn = QPushButton("✋  INTERRUPT  [ESC]")
-        self._interrupt_btn.setFixedHeight(34)
-        self._interrupt_btn.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
-        self._interrupt_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._interrupt_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: #140008; color: {C.MUTED_C};
-                border: 1px solid {C.MUTED_C}; border-radius: 3px;
-            }}
-            QPushButton:hover {{
-                background: #200010; border: 1px solid #ff6688;
-            }}
-            QPushButton:pressed {{
-                background: #300018;
-            }}
-        """)
-        self._interrupt_btn.clicked.connect(self._do_interrupt)
-        lay.addWidget(self._interrupt_btn)
+        # 4. Pulsanti di Stato Affiancati (Inline Pills)
+        btn_row = QHBoxLayout()
+        btn_row.setSpacing(6)
 
-        self._mute_btn = QPushButton("🎙  MICROPHONE ACTIVE")
+        self._interrupt_btn = QPushButton("🛑 INTERRUPT [ESC]")
+        self._interrupt_btn.setFixedHeight(30)
+        self._interrupt_btn.setFont(QFont("Consolas", 8, QFont.Weight.Bold))
+        self._interrupt_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._interrupt_btn.clicked.connect(self._do_interrupt)
+        btn_row.addWidget(self._interrupt_btn)
+
+        self._mute_btn = QPushButton("🎙 MIC ACTIVE")
         self._mute_btn.setFixedHeight(30)
-        self._mute_btn.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+        self._mute_btn.setFont(QFont("Consolas", 8, QFont.Weight.Bold))
         self._mute_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._mute_btn.clicked.connect(self._toggle_mute)
         self._style_mute_btn()
-        lay.addWidget(self._mute_btn)
+        btn_row.addWidget(self._mute_btn)
 
-        return w
+        lay.addLayout(btn_row)
+
+        # Applica immediatamente i colori dello stile corrente
+        self._update_right_panel_styles()
+        return self._right_panel_w
+
+    def _update_right_panel_styles(self):
+        """Aggiorna i colori del pannello destro in base al tema selezionato."""
+        bg_main  = getattr(self, "c_bg_main", "#0b0e14")
+        bg_card  = getattr(self, "c_bg_card", "#131722")
+        border   = getattr(self, "c_border", "#1f293d")
+        accent   = getattr(self, "c_accent", "#00f0ff")
+        subtext  = getattr(self, "c_subtext", "#5a657b")
+
+        if hasattr(self, "_right_panel_w"):
+            self._right_panel_w.setStyleSheet(f"background: {bg_main}; border-left: 1px solid {border};")
+
+        if hasattr(self, "_right_sec_labels"):
+            for l in self._right_sec_labels:
+                l.setStyleSheet(f"color: {accent}; background: transparent; letter-spacing: 1px;")
+
+        if hasattr(self, "_file_hint"):
+            self._file_hint.setStyleSheet(f"color: {subtext}; background: transparent;")
+
+        if hasattr(self, "_interrupt_btn"):
+            self._interrupt_btn.setStyleSheet("""
+                QPushButton {
+                    background: #1a0a10;
+                    color: #ff3355;
+                    border: 1px solid #4a121e;
+                    border-radius: 4px;
+                }
+                QPushButton:hover {
+                    background: #ff3355;
+                    color: #ffffff;
+                    border: 1px solid #ff3355;
+                }
+                QPushButton:pressed {
+                    background: #990022;
+                }
+            """)
+
+        if hasattr(self, "_log") and hasattr(self._log, "setStyleSheet"):
+            self._log.setStyleSheet(f"background: {bg_card}; border: 1px solid {border}; color: {accent};")
+
+        if hasattr(self, "_drop_zone") and hasattr(self._drop_zone, "setStyleSheet"):
+            self._drop_zone.setStyleSheet(f"background: {bg_card}; border: 1px dashed {border}; color: {subtext};")
 
     def _build_quick_drawer(self) -> QWidget:
         """Floating overlay panel shown when the ⚙ header button is toggled."""
-        _BTN_STYLE_PRI = f"""
-            QPushButton {{
-                background: #00091a; color: {C.PRI};
-                border: 1px solid {C.PRI_DIM}; border-radius: 3px;
-                text-align: left; padding: 0 8px;
-            }}
-            QPushButton:hover {{ background: {C.PRI_GHO}; border-color: {C.PRI}; }}
-        """
-        _BTN_STYLE_DIM = f"""
-            QPushButton {{
-                background: transparent; color: {C.TEXT_MED};
-                border: 1px solid {C.BORDER}; border-radius: 3px;
-                text-align: left; padding: 0 8px;
-            }}
-            QPushButton:hover {{ color: {C.PRI}; border-color: {C.BORDER_B}; }}
-        """
+        self._drawer_w = QWidget(self.centralWidget())
+        self._drawer_w.setObjectName("QuickDrawer")
+        self._drawer_w.hide()
 
-        w = QWidget(self.centralWidget())
-        w.setObjectName("QuickDrawer")
-        w.setStyleSheet(f"""
-            QWidget#QuickDrawer {{
-                background: {C.DARK};
-                border: 1px solid {C.BORDER_B};
-                border-top: none;
-                border-radius: 0 0 6px 6px;
-            }}
-        """)
-        w.hide()
-
-        lay = QVBoxLayout(w)
+        lay = QVBoxLayout(self._drawer_w)
         lay.setContentsMargins(10, 8, 10, 10)
         lay.setSpacing(5)
 
-        hdr = QLabel("◈ CONTROLS")
-        hdr.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
-        hdr.setStyleSheet(f"color: {C.PRI_DIM}; background: transparent; "
-                          f"border-bottom: 1px solid {C.BORDER}; padding-bottom: 4px;")
-        lay.addWidget(hdr)
+        self._drawer_hdr = QLabel("◈ CONTROLS")
+        self._drawer_hdr.setFont(QFont("Courier New", 7, QFont.Weight.Bold))
+        lay.addWidget(self._drawer_hdr)
 
-        remote_btn = QPushButton("◉  REMOTE CONTROL")
-        remote_btn.setFixedHeight(30)
-        remote_btn.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
-        remote_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        remote_btn.setStyleSheet(_BTN_STYLE_PRI)
-        remote_btn.clicked.connect(self._open_remote)
-        lay.addWidget(remote_btn)
+        self._remote_btn = QPushButton("◉   REMOTE CONTROL")
+        self._remote_btn.setFixedHeight(30)
+        self._remote_btn.setFont(QFont("Courier New", 8, QFont.Weight.Bold))
+        self._remote_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._remote_btn.clicked.connect(self._open_remote)
+        lay.addWidget(self._remote_btn)
 
-        fs_btn = QPushButton("⛶  FULLSCREEN  [F11]")
-        fs_btn.setFixedHeight(26)
-        fs_btn.setFont(QFont("Courier New", 7))
-        fs_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        fs_btn.setStyleSheet(_BTN_STYLE_DIM)
-        fs_btn.clicked.connect(self._toggle_fullscreen)
-        lay.addWidget(fs_btn)
+        self._fs_btn = QPushButton("⛶   FULLSCREEN  [F11]")
+        self._fs_btn.setFixedHeight(26)
+        self._fs_btn.setFont(QFont("Courier New", 7))
+        self._fs_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._fs_btn.clicked.connect(self._toggle_fullscreen)
+        lay.addWidget(self._fs_btn)
 
-        sc_btn = QPushButton("⊞  CREATE DESKTOP SHORTCUT")
-        sc_btn.setFixedHeight(26)
-        sc_btn.setFont(QFont("Courier New", 7))
-        sc_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        sc_btn.setStyleSheet(_BTN_STYLE_DIM)
-        sc_btn.clicked.connect(self._create_desktop_shortcut)
-        lay.addWidget(sc_btn)
+        self._sc_btn = QPushButton("⊞   CREATE DESKTOP SHORTCUT")
+        self._sc_btn.setFixedHeight(26)
+        self._sc_btn.setFont(QFont("Courier New", 7))
+        self._sc_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._sc_btn.clicked.connect(self._create_desktop_shortcut)
+        lay.addWidget(self._sc_btn)
 
-        self._autostart_btn = QPushButton("◉  AUTO-START: OFF")
+        self._autostart_btn = QPushButton("◉   AUTO-START: OFF")
         self._autostart_btn.setFixedHeight(26)
         self._autostart_btn.setFont(QFont("Courier New", 7))
         self._autostart_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._autostart_btn.clicked.connect(self._toggle_autostart)
         lay.addWidget(self._autostart_btn)
 
-        cust_btn = QPushButton("⚙  CUSTOMISE ASSISTANT")
-        cust_btn.setFixedHeight(26)
-        cust_btn.setFont(QFont("Courier New", 7))
-        cust_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        cust_btn.setStyleSheet(_BTN_STYLE_DIM)
-        cust_btn.clicked.connect(self._open_customize)
-        lay.addWidget(cust_btn)
+        self._cust_btn = QPushButton("⚙   CUSTOMISE ASSISTANT")
+        self._cust_btn.setFixedHeight(26)
+        self._cust_btn.setFont(QFont("Courier New", 7))
+        self._cust_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._cust_btn.clicked.connect(self._open_customize)
+        lay.addWidget(self._cust_btn)
 
         self._brief_btn = QPushButton()
         self._brief_btn.setFixedHeight(26)
@@ -2803,31 +3249,91 @@ class MainWindow(QMainWindow):
         self._brief_btn.clicked.connect(self._toggle_brief)
         lay.addWidget(self._brief_btn)
 
-        w.adjustSize()
-        return w
+        # Applica immediatamente lo stile grafico iniziale
+        self._update_quick_drawer_styles()
+
+        self._drawer_w.adjustSize()
+        return self._drawer_w
+
+    def _update_quick_drawer_styles(self):
+        """Aggiorna dinamicamente i colori del Quick Drawer in base al tema selezionato."""
+        bg_main = getattr(self, "c_bg_main", "#0b0e14")
+        bg_card = getattr(self, "c_bg_card", "#131722")
+        border  = getattr(self, "c_border", "#1f293d")
+        accent  = getattr(self, "c_accent", "#00f0ff")
+        subtext = getattr(self, "c_subtext", "#8a99ad")
+
+        # Stile Pulsante Primario (Remote Control)
+        btn_style_pri = f"""
+            QPushButton {{
+                background: {bg_main}; color: {accent};
+                border: 1px solid {accent}; border-radius: 3px;
+                text-align: left; padding: 0 8px;
+            }}
+            QPushButton:hover {{ background: {bg_card}; border-color: {accent}; }}
+        """
+
+        # Stile Pulsanti Secondari
+        btn_style_dim = f"""
+            QPushButton {{
+                background: transparent; color: {subtext};
+                border: 1px solid {border}; border-radius: 3px;
+                text-align: left; padding: 0 8px;
+            }}
+            QPushButton:hover {{ color: {accent}; border-color: {accent}; }}
+        """
+
+        if hasattr(self, "_drawer_w"):
+            self._drawer_w.setStyleSheet(f"""
+                QWidget#QuickDrawer {{
+                    background: {bg_main};
+                    border: 1px solid {border};
+                    border-top: none;
+                    border-radius: 0 0 6px 6px;
+                }}
+            """)
+
+        if hasattr(self, "_drawer_hdr"):
+            self._drawer_hdr.setStyleSheet(f"color: {accent}; background: transparent; "
+                                           f"border-bottom: 1px solid {border}; padding-bottom: 4px;")
+
+        if hasattr(self, "_remote_btn"):
+            self._remote_btn.setStyleSheet(btn_style_pri)
+
+        for btn_name in ["_fs_btn", "_sc_btn", "_autostart_btn", "_cust_btn", "_brief_btn"]:
+            if hasattr(self, btn_name):
+                getattr(self, btn_name).setStyleSheet(btn_style_dim)
 
     def _toggle_drawer(self, checked: bool):
         from PyQt6.QtWidgets import QMenu
-        from PyQt6.QtGui import QAction
+        from PyQt6.QtGui import QAction, QFont
 
         menu = QMenu(self)
-        menu.setStyleSheet(f"""
-            QMenu {{
-                background-color: {C.DARK};
-                color: {C.WHITE};
-                border: 1px solid {C.BORDER_B};
-                font-family: 'Consolas', monospace;
-                font-size: 11px;
-            }}
-            QMenu::item {{
+        menu.setFont(QFont("Segoe UI", 9))
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #0b0e14;
+                color: #e2e8f0;
+                border: 1px solid #1f293d;
+                border-radius: 6px;
+                padding: 4px;
+            }
+            QMenu::item {
                 padding: 6px 16px;
-            }}
-            QMenu::item:selected {{
-                background-color: {C.PRI_GHO};
-                color: {C.PRI};
-            }}
+                border-radius: 4px;
+            }
+            QMenu::item:selected {
+                background-color: #131722;
+                color: #00f0ff;
+            }
+            QMenu::separator {
+                height: 1px;
+                background: #1f293d;
+                margin: 4px 0px;
+            }
         """)
 
+        # 1. Opzioni preesistenti
         act_hud = QAction("🧠 Memory Vault (HUD View)", self)
         act_hud.triggered.connect(self._load_memory_vault_view)
         menu.addAction(act_hud)
@@ -2836,10 +3342,474 @@ class MainWindow(QMainWindow):
         act_obsidian.triggered.connect(self._open_obsidian_vault_window)
         menu.addAction(act_obsidian)
 
+        # -------------------------------------------------------------
+        # 2. Nuova voce: Impostazioni & Temi
+        # -------------------------------------------------------------
+        menu.addSeparator()
+
+        act_settings = QAction("⚙️ Impostazioni e Temi...", self)
+        act_settings.triggered.connect(self._open_settings_dialog)
+        menu.addAction(act_settings)
+
         # Mostra il menu esattamente sotto l'icona ingranaggio
         btn_widget = self.sender()
         if btn_widget:
             menu.exec(btn_widget.mapToGlobal(btn_widget.rect().bottomLeft()))
+
+    def apply_theme(self, theme_name: str):
+        """Metodo globale di cambio tema che aggiorna tutti i moduli visivi dell'HUD senza chiudere i pannelli."""
+        print(f"[JARVIS UI] Applicazione tema: {theme_name}")
+
+        # 1. Preserva lo stato di visibilità del pannello notizie/vault
+        panel_was_visible = False
+        if hasattr(self, "_content_panel_w") and self._content_panel_w:
+            panel_was_visible = self._content_panel_w.isVisible()
+
+        # 2. Definizione Palette Colori per i Temi Scuri & Nuovi Temi (Incluso il Core centrale)
+        if "OLED" in theme_name:
+            self.c_bg_main   = "#000000"
+            self.c_bg_card   = "#080808"
+            self.c_bg_btn    = "#0e0e0e"
+            self.c_bg_hover  = "#181818"
+            self.c_border    = "#222222"
+            self.c_accent    = "#bb86fc"
+            self.c_subtext   = "#777777"
+            self.c_core_main = "#bb86fc"   # Viola chiaro
+            self.c_core_sec  = "#7000ff"   # Viola scuro
+        elif "Enterprise" in theme_name:
+            self.c_bg_main   = "#0d1117"
+            self.c_bg_card   = "#161b22"
+            self.c_bg_btn    = "#1c2128"
+            self.c_bg_hover  = "#2d333b"
+            self.c_border    = "#30363d"
+            self.c_accent    = "#58a6ff"
+            self.c_subtext   = "#8b949e"
+            self.c_core_main = "#58a6ff"   # Blu elettrico
+            self.c_core_sec  = "#1f6beb"   # Blu scuro
+        elif "Neon" in theme_name:
+            self.c_bg_main   = "#050505"
+            self.c_bg_card   = "#0d140d"
+            self.c_bg_btn    = "#121f12"
+            self.c_bg_hover  = "#1a2e1a"
+            self.c_border    = "#1e3a1e"
+            self.c_accent    = "#00ff66"   # Verde Fluo
+            self.c_subtext   = "#ccff00"   # Giallo Fluo
+            self.c_core_main = "#00ff66"   # Verde Fluo
+            self.c_core_sec  = "#ccff00"   # Giallo Fluo
+        elif "Cloud" in theme_name:
+            self.c_bg_main   = "#0f172a"
+            self.c_bg_card   = "#1e293b"
+            self.c_bg_btn    = "#334155"
+            self.c_bg_hover  = "#475569"
+            self.c_border    = "#475569"
+            self.c_accent    = "#f8fafc"   # Bianco Cloud
+            self.c_subtext   = "#38bdf8"   # Sky Blue
+            self.c_core_main = "#ffffff"   # Bianco Puro
+            self.c_core_sec  = "#38bdf8"   # Azzurro Cielo
+        elif "Purple" in theme_name:
+            self.c_bg_main   = "#0a0512"
+            self.c_bg_card   = "#140b24"
+            self.c_bg_btn    = "#1f1038"
+            self.c_bg_hover  = "#2e1065"
+            self.c_border    = "#3b0764"
+            self.c_accent    = "#ec4899"   # Rosa Neon
+            self.c_subtext   = "#a855f7"   # Viola Deep
+            self.c_core_main = "#ec4899"   # Rosa Neon
+            self.c_core_sec  = "#a855f7"   # Viola Deep
+        elif "Ironman" in theme_name:
+            self.c_bg_main   = "#030a16"
+            self.c_bg_card   = "#08152c"
+            self.c_bg_btn    = "#0e2242"
+            self.c_bg_hover  = "#15325b"
+            self.c_border    = "#1e3a5f"
+            self.c_accent    = "#00d8ff"   # Ciano Olografico Arc
+            self.c_subtext   = "#ffd700"   # Oro Stark
+            self.c_core_main = "#00d8ff"   # Ciano Reattore Arc
+            self.c_core_sec  = "#ffd700"   # Oro Stark
+        elif "Glitter" in theme_name:
+            self.c_bg_main   = "#160526"
+            self.c_bg_card   = "#240a3c"
+            self.c_bg_btn    = "#3b0e5d"
+            self.c_bg_hover  = "#5c138f"
+            self.c_border    = "#ff77bc"
+            self.c_accent    = "#ff66cc"
+            self.c_subtext   = "#ffd700"
+            self.c_core_main = "#ff66cc"
+            self.c_core_sec  = "#ffd700"
+        elif "Arctic" in theme_name:
+            # Tema Chiaro / Minimal Ice Lab
+            self.c_bg_main   = "#eef4f8"   # Sfondo principale grigio/azzurro ghiaccio
+            self.c_bg_card   = "#ffffff"   # Card bianche
+            self.c_bg_btn    = "#dbe3ed"   # Bottoni grigio-azzurri chiari
+            self.c_bg_hover  = "#c7d5e5"   # Hover azzurrato
+            self.c_border    = "#b0c4de"   # Bordi azzurro ghiaccio
+            self.c_accent    = "#0284c7"   # Blu acceso per evidenziazioni
+            self.c_subtext   = "#334155"   # Testo scuro/scuro antracite (LEGGIBILE!)
+            self.c_core_main = "#0284c7"   # Reattore centrale azzurro
+            self.c_core_sec  = "#38bdf8"
+
+        elif "Matrix" in theme_name:
+            self.c_bg_main   = "#020a02"   # Nero quasi totale
+            self.c_bg_card   = "#051405"
+            self.c_bg_btn    = "#0a220a"
+            self.c_bg_hover  = "#0f330f"
+            self.c_border    = "#155515"
+            self.c_accent    = "#00ff33"   # Verde fosforescente
+            self.c_subtext   = "#009922"
+            self.c_core_main = "#00ff33"
+            self.c_core_sec  = "#008811"
+
+        elif "Deep Space" in theme_name:
+            # Sfondo cosmico indaco/blu notte profondo
+            self.c_bg_main   = "#040614"   # Nero spaziale/blu profondo
+            self.c_bg_card   = "#0a0f26"   # Blu indaco scuro
+            self.c_bg_btn    = "#111838"   # Blu notte
+            self.c_bg_hover  = "#1a2452"   # Blu cosmico brillante
+            self.c_border    = "#273570"   # Bordi indaco
+            self.c_accent    = "#38bdf8"   # Ciano stellare / azzurro brillante
+            self.c_subtext   = "#818cf8"   # Viola indaco tenue
+            self.c_core_main = "#38bdf8"   # Reattore Ciano Stellare
+            self.c_core_sec  = "#818cf8"   # Reattore Viola cosmico
+
+        elif "Executive" in theme_name:
+            self.c_bg_main   = "#0e0e11"   # Carbone scuro elegante
+            self.c_bg_card   = "#16161a"   # Pannello nero premium
+            self.c_bg_btn    = "#222228"
+            self.c_bg_hover  = "#2e2e36"
+            self.c_border    = "#3a3a46"
+            self.c_accent    = "#d4af37"   # Oro discreto/Porsche 911 vibe 😉
+            self.c_subtext   = "#e2e2e8"   # Bianco caldo
+            self.c_core_main = "#d4af37"   # Oro lucido discreto
+            self.c_core_sec  = "#8a7322"
+
+        elif "Ocean" in theme_name:
+            # Tema Ocean: Navy Scuro Abissale
+            self.c_bg_main   = "#030a16"   # Blu Navy scurissimo (quasi nero)
+            self.c_bg_card   = "#081326"   # Card Navy molto scura
+            self.c_bg_btn    = "#0e1e38"   # Bottoni Navy scuro
+            self.c_bg_hover  = "#172d52"   # Hover Blu leggermente più luminoso
+            self.c_border    = "#1a2e4c"   # Bordi Navy discreti
+            self.c_accent    = "#00d8ff"   # Ciano elettrico per scritte/dettagli
+            self.c_subtext   = "#4a6b94"   # Testo secondario grigio-blu
+            self.c_core_main = "#00d8ff"   # Reattore Ciano
+            self.c_core_sec  = "#0055aa"   # Reattore Blu scuro
+
+        elif "Glass" in theme_name:
+            # Colori semitrasparenti per effetto Glassmorphism
+            self.c_bg_main   = "#0f172a"
+            self.c_bg_card   = "#1e293b"
+            self.c_bg_btn    = "#334155"
+            self.c_bg_hover  = "#475569"
+            self.c_border    = "#38bdf8"
+            self.c_accent    = "#a5f3fc"   # Ciano morbido lucido
+            self.c_subtext   = "#94a3b8"
+            self.c_core_main = "#38bdf8"
+            self.c_core_sec  = "#a5f3fc"
+        else:
+            # Cyan Cyberpunk (Default)
+            self.c_bg_main   = "#0b0e14"
+            self.c_bg_card   = "#131722"
+            self.c_bg_btn    = "#131722"
+            self.c_bg_hover  = "#1c2333"
+            self.c_border    = "#1f293d"
+            self.c_accent    = "#00f0ff"
+            self.c_subtext   = "#5a657b"
+            self.c_core_main = "#00f0ff"
+            self.c_core_sec  = "#0055ff"
+
+     # Riconoscimento se il tema è di tipo CHIARO (es. Arctic)
+            is_light_theme = "Arctic" in theme_name
+    
+            # QSS per Input, Log e componenti di testo
+            text_color = "#0f172a" if is_light_theme else "#ffffff"
+            log_text_color = "#0369a1" if is_light_theme else "#00f0ff"
+            border_color = self.c_border
+    
+            # 1. Stile Finestra Principale e Top Bar Header
+            main_qss = f"""
+                QMainWindow, QDialog {{
+                    background-color: {self.c_bg_main};
+                    color: {text_color};
+                }}
+                QWidget#header_widget {{
+                    background-color: {self.c_bg_card};
+                    border-bottom: 1px solid {border_color};
+                }}
+                QLabel {{
+                    color: {text_color};
+                }}
+                QLineEdit {{
+                    background-color: {self.c_bg_card};
+                    color: {text_color};
+                    border: 1px solid {border_color};
+                    padding: 6px;
+                    border-radius: 4px;
+                }}
+                QTextEdit, QPlainTextEdit {{
+                    background-color: {self.c_bg_card};
+                    color: {log_text_color};
+                    border: 1px solid {border_color};
+                }}
+            """
+            self.setStyleSheet(main_qss)
+
+        # 3. Gestione Overlay Particelle (Attivo SOLO per Glitter e Deep Space)
+        if hasattr(self, "_glitter") and self._glitter:
+            if any(k in theme_name for k in ["Glitter", "Sparkle", "Deep Space"]):
+                if "Deep Space" in theme_name:
+                    self._glitter.set_mode("stars")
+                else:
+                    self._glitter.set_mode("glitter")
+
+                self._glitter.setGeometry(0, 0, self.width(), self.height())
+                self._glitter.raise_()
+                self._glitter.start()
+            else:
+                self._glitter.stop()  # Spegne le particelle per Ocean e tutti gli altri temi
+
+        # Aggiornamento colore testo Activity Log nel pannello destro
+        if hasattr(self, "log_widget") and self.log_widget:
+            self.log_widget.setStyleSheet(f"""
+                QTextEdit, QPlainTextEdit {{
+                    background-color: {self.c_bg_card};
+                    color: {self.c_accent}; /* Il testo prende il colore accento del tema! */
+                    border: 1px solid {self.c_border};
+                    font-family: 'Consolas', 'Segoe UI', monospace;
+                }}
+            """)
+        elif hasattr(self, "_update_right_panel_styles"):
+            self._update_right_panel_styles()
+
+        # Aggiornamento colori dati Sys Monitor (CPU, RAM, GPU, NET)
+        if hasattr(self, "_update_left_panel_styles"):
+            self._update_left_panel_styles()
+        elif hasattr(self, "sys_monitor_widget"):
+            self.sys_monitor_widget.setStyleSheet(f"""
+                QLabel {{
+                    color: {self.c_accent}; /* Le percentuali e i valori prendono il colore del tema! */
+                }}
+                QLabel#subtext {{
+                    color: {self.c_subtext};
+                }}
+                QProgressBar::chunk {{
+                    background-color: {self.c_accent};
+                }}
+            """)
+
+        # 4. Sfondo della finestra radice
+        if "Glitter" in theme_name:
+            self.setStyleSheet("""
+                QMainWindow, QDialog {
+                    background: qradialgradient(
+                        cx: 0.5, cy: 0.5, radius: 0.8,
+                        fx: 0.5, fy: 0.5,
+                        stop: 0 #2a0845, 
+                        stop: 0.6 #160526, 
+                        stop: 1 #0d0218
+                    );
+                }
+            """)
+        if "Glass" in theme_name:
+            self.setStyleSheet("""
+                QFrame, QGroupBox {
+                    background-color: rgba(30, 41, 59, 0.55);
+                    border: 1px solid rgba(255, 255, 255, 0.18);
+                    border-radius: 12px;
+                }
+                QPushButton {
+                    background-color: rgba(51, 65, 85, 0.6);
+                    border: 1px solid rgba(165, 243, 252, 0.3);
+                    border-radius: 8px;
+                    color: #f8fafc;
+                }
+                QPushButton:hover {
+                    background-color: rgba(71, 85, 105, 0.8);
+                    border: 1px solid #38bdf8;
+                }
+            """)
+        if "Ocean" in theme_name:
+            self.setStyleSheet("""
+                QMainWindow, QDialog {
+                    background: qradialgradient(
+                        cx: 0.5, cy: 0.2, radius: 0.9,
+                        fx: 0.5, fy: 0.1,
+                        stop: 0 #082846, 
+                        stop: 0.5 #03111e, 
+                        stop: 1 #010810
+                    );
+                }
+            """)
+        else:
+            self.setStyleSheet(f"background-color: {self.c_bg_main};")
+
+        # 5. Propagazione dinamica a tutti i moduli dell'HUD
+        if hasattr(self, "_update_header_styles"):
+            self._update_header_styles()
+
+        if hasattr(self, "_update_left_panel_styles"):
+            self._update_left_panel_styles()
+
+        if hasattr(self, "_update_center_panel_styles"):
+            self._update_center_panel_styles()
+
+        if hasattr(self, "_update_right_panel_styles"):
+            self._update_right_panel_styles()
+
+        if hasattr(self, "_update_quick_drawer_styles"):
+            self._update_quick_drawer_styles()
+
+        if hasattr(self, "_update_content_panel_styles"):
+            self._update_content_panel_styles()
+
+        if hasattr(self, "_update_input_row_styles"):
+            self._update_input_row_styles()
+
+        # Aggiornamento stili pannello destro (Activity Log, Dropzone, Command Input)
+        if hasattr(self, "_update_right_panel_styles"):
+            self._update_right_panel_styles()
+
+        # Aggiornamento stili Sys Monitor (Pannello Sinistro)
+        if hasattr(self, "_update_left_panel_styles"):
+            self._update_left_panel_styles()
+
+        # Aggiornamento stili News / Vault (Pannello Basso)
+        if hasattr(self, "_update_content_panel_styles"):
+            self._update_content_panel_styles()
+
+        # 6. Passiamo i colori SPECIFICI del Core (c_core_main e c_core_sec)
+        target_orb = getattr(self, "_face_widget", None) or getattr(self, "hud_canvas", None) or getattr(self, "orb_widget", None)
+        
+        if target_orb and hasattr(target_orb, "apply_theme_colors"):
+            target_orb.apply_theme_colors(
+                bg_hex=self.c_bg_main,
+                main_hex=self.c_core_main,
+                sec_hex=self.c_core_sec,
+                theme_name=theme_name
+            )
+            target_orb.update()
+        else:
+            for child in self.findChildren(QWidget):
+                if type(child).__name__ == "HudCanvas" and hasattr(child, "apply_theme_colors"):
+                    child.apply_theme_colors(
+                        bg_hex=self.c_bg_main,
+                        main_hex=self.c_core_main,
+                        sec_hex=self.c_core_sec,
+                        theme_name=theme_name
+                    )
+                    child.update()
+
+        # Aggiorna il colore del testo e dello sfondo nell'Activity Log
+        if hasattr(self, "_log") and self._log:
+            self._log.setStyleSheet(f"""
+                QTextEdit, QPlainTextEdit, QLabel {{
+                    color: {self.c_accent};
+                    background-color: transparent;
+                }}
+            """)
+
+        # Aggiorna le etichette del System Monitor
+        if hasattr(self, "_sys_monitor") and self._sys_monitor:
+            self._sys_monitor.setStyleSheet(f"""
+                QLabel {{
+                    color: {self.c_accent};
+                }}
+            """)
+
+        # 7. Mantiene aperto il pannello notizie/vault se era già visibile prima del cambio tema
+        if hasattr(self, "_content_panel_w") and self._content_panel_w and panel_was_visible:
+            self._content_panel_w.show()
+
+        if hasattr(self, "_update_notes_tabs_styles"):
+            self._update_notes_tabs_styles()
+
+        # Forza il ridisegno grafico immediato
+        self.update()
+        # ── SISTEMA RE-THEME DINAMICO GLOBALE ──────────────────────
+        # Aggiorna la tavolozza globale e ricolora automaticamente Log, Sys Monitor e Testi
+        old_pal = current_palette()
+        if apply_ui_accent(self.c_accent):
+            retheme_all_widgets(old_pal, current_palette())
+        # ── RE-THEME HARDCORE DI TUTTI I WIDGET (LOG + SYS MONITOR) ──
+        try:
+            # 1. Salva la palette corrente prima della modifica
+            old_pal = current_palette()
+
+            # 2. Aggiorna le costanti primarie e secondarie del modulo colori (C)
+            if hasattr(C, "PRI"):
+                C.PRI = self.c_accent
+            if hasattr(C, "ACCENT"):
+                C.ACCENT = self.c_accent
+            if hasattr(C, "SEC"):
+                C.SEC = self.c_core_sec
+
+            # 3. Forziamo apply_ui_accent ad applicare il colore primario
+            apply_ui_accent(self.c_accent)
+
+            # 4. Invochiamo il retheme di tutti i sotto-widget dell'HUD
+            new_pal = current_palette()
+            retheme_all_widgets(old_pal, new_pal)
+
+            # 5. Se il log ha un proprio QTextEdit o stylesheet dedicato
+            if hasattr(self, "_log") and hasattr(self._log, "setStyleSheet"):
+                self._log.setStyleSheet(
+                    f"color: {self.c_accent}; background: transparent;"
+                )
+
+            # 6. Se il Sys Monitor ha etichette specifiche da ricolorare
+            if hasattr(self, "_sys_monitor") and hasattr(
+                self._sys_monitor, "setStyleSheet"
+            ):
+                self._sys_monitor.setStyleSheet(
+                    f"color: {self.c_accent}; background: transparent;"
+                )
+
+        except Exception as err:
+            print(f"[JARVIS UI] Errore durante il retheme dinamico: {err}")
+
+        # ── 1. RICALCOLO PALETTE GLOBALE HSV ─────────────────────
+        # Ricalcola tutte le costanti di C (C.PRI, C.SEC, C.ACCENT, ecc.)
+        if apply_ui_accent(self.c_accent):
+            # C.PRI deve essere esattamente il colore di accento selezionato
+            C.PRI = self.c_accent.lower()
+
+        # ── 2. AGGIORNAMENTO FORZATO PANNELLO DESTRO (ACTIVITY LOG) ──
+        if hasattr(self, "_log") and self._log:
+            # Ricolora il contenitore del log
+            self._log.setStyleSheet(f"""
+                QTextEdit, QPlainTextEdit, QLabel {{
+                    color: {self.c_accent} !important;
+                    background-color: transparent;
+                }}
+            """)
+            # Se la classe _log ha una proprietà per il colore di testo dei messaggi
+            if hasattr(self._log, "c_accent"):
+                self._log.c_accent = self.c_accent
+            if hasattr(self._log, "_text_color"):
+                self._log._text_color = self.c_accent
+
+        # ── 3. AGGIORNAMENTO FORZATO PANNELLO SINISTRO (SYS MONITOR) ──
+        if hasattr(self, "_update_left_panel_styles"):
+            self._update_left_panel_styles()
+
+        # Richiama retheme_all_widgets se disponibile per notificare gli altri moduli
+        if "retheme_all_widgets" in globals():
+            try:
+                retheme_all_widgets(old_pal, current_palette())
+            except Exception:
+                pass
+
+        # Forza il ridisegno immediato dell'interfaccia
+        self.update()
+
+    def _open_settings_dialog(self):
+        """Apre la finestra delle impostazioni e applica il tema senza alterare lo stato dei pannelli."""
+        dialog = SettingsDialog(self)
+        if dialog.exec():  # Ritorna True quando l'utente clicca su "SALVA"
+            config = dialog.config
+
+            # Applica il tema selezionato (che preserva lo stato di visibilità del pannello)
+            if hasattr(self, "apply_theme"):
+                self.apply_theme(config.get("theme", "Cyan Cyberpunk (Default)"))
 
     def _position_quick_drawer(self):
         if not hasattr(self, '_quick_drawer'):
@@ -2850,141 +3820,215 @@ class MainWindow(QMainWindow):
         self._quick_drawer.setGeometry(12, 54, _W, self._quick_drawer.sizeHint().height())
 
     def _build_input_row(self) -> QHBoxLayout:
-        row = QHBoxLayout(); row.setSpacing(5)
+        row = QHBoxLayout()
+        row.setSpacing(6)
+
         self._input = QLineEdit()
-        self._input.setPlaceholderText("Type a command or question…")
-        self._input.setFont(QFont("Courier New", 9))
-        self._input.setFixedHeight(30)
-        self._input.setStyleSheet(f"""
-            QLineEdit {{
-                background: #000d14; color: {C.WHITE};
-                border: 1px solid {C.BORDER}; border-radius: 3px; padding: 3px 7px;
-            }}
-            QLineEdit:focus {{ border: 1px solid {C.PRI}; }}
-        """)
+        self._input.setPlaceholderText("Type a command or question...")
+        self._input.setFont(QFont("Consolas", 9))
+        self._input.setFixedHeight(34)
         self._input.returnPressed.connect(self._send)
         row.addWidget(self._input)
 
-        send = QPushButton("▸")
-        send.setFixedSize(30, 30)
-        send.setFont(QFont("Courier New", 11, QFont.Weight.Bold))
-        send.setCursor(Qt.CursorShape.PointingHandCursor)
-        send.setStyleSheet(f"""
-            QPushButton {{
-                background: {C.PANEL}; color: {C.PRI};
-                border: 1px solid {C.PRI_DIM}; border-radius: 3px;
-            }}
-            QPushButton:hover {{ background: {C.PRI_GHO}; border: 1px solid {C.PRI}; }}
-        """)
-        send.clicked.connect(self._send)
-        row.addWidget(send)
+        self._send_btn = QPushButton("▸")
+        self._send_btn.setFixedSize(34, 34)
+        self._send_btn.setFont(QFont("Consolas", 12, QFont.Weight.Bold))
+        self._send_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._send_btn.clicked.connect(self._send)
+        row.addWidget(self._send_btn)
+
+        # Applica gli stili iniziali
+        self._update_input_row_styles()
         return row
 
+    def _update_input_row_styles(self):
+        """Aggiorna lo stile del campo di testo e del pulsante invio."""
+        bg_main = getattr(self, "c_bg_main", "#0b0e14")
+        bg_card = getattr(self, "c_bg_card", "#131722")
+        border  = getattr(self, "c_border", "#1f293d")
+        accent  = getattr(self, "c_accent", "#00f0ff")
+        subtext = getattr(self, "c_subtext", "#e2e8f0")
+
+        if hasattr(self, "_input"):
+            self._input.setStyleSheet(f"""
+                QLineEdit {{
+                    background: {bg_main};
+                    color: {subtext};
+                    border: 1px solid {border};
+                    border-radius: 6px;
+                    padding: 4px 10px;
+                }}
+                QLineEdit:focus {{
+                    border: 1px solid {accent};
+                    background: {bg_card};
+                }}
+            """)
+
+        if hasattr(self, "_send_btn"):
+            self._send_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: {bg_card};
+                    color: {accent};
+                    border: 1px solid {border};
+                    border-radius: 6px;
+                }}
+                QPushButton:hover {{
+                    background: {bg_main};
+                    color: {accent};
+                    border: 1px solid {accent};
+                }}
+                QPushButton:pressed {{
+                    background: {accent};
+                    color: {bg_main};
+                }}
+            """)
+
     def _build_content_panel(self) -> QWidget:
-        """Pannello nativo Memory Vault con font Consolas ad alta leggibilità e controlli completi CRUD (.md)."""
-        w = QWidget()
-        w.setObjectName("ContentPanel")
-        w.setStyleSheet(f"QWidget#ContentPanel {{ background: {C.PANEL}; border-top: 1px solid {C.BORDER_B}; }}")
-        w.hide()
+        """Pannello nativo Memory Vault & News Feed Sci-Fi ad alta leggibilità."""
+        self._content_panel_w = QWidget()
+        self._content_panel_w.setObjectName("ContentPanel")
+        self._content_panel_w.hide()
 
-        lay = QVBoxLayout(w)
-        lay.setContentsMargins(12, 7, 12, 8)
-        lay.setSpacing(5)
+        lay = QVBoxLayout(self._content_panel_w)
+        lay.setContentsMargins(10, 6, 10, 6)
+        lay.setSpacing(6)
 
-        hdr = QHBoxLayout(); hdr.setSpacing(6)
-        dot = QLabel("🧠"); dot.setStyleSheet("background: transparent;")
-        hdr.addWidget(dot)
+        hdr = QHBoxLayout()
+        hdr.setSpacing(6)
 
-        self._content_title_lbl = QLabel("MEMORY VAULT")
-        self._content_title_lbl.setFont(QFont("Consolas", 8, QFont.Weight.Bold))
-        self._content_title_lbl.setStyleSheet(f"color: {C.PRI}; background: transparent; letter-spacing: 1px;")
+        # Indicatore Neon di sezione
+        self._content_title_lbl = QLabel("▶ LIVE DATA FEED")
+        self._content_title_lbl.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
         hdr.addWidget(self._content_title_lbl)
 
-        from PyQt6.QtWidgets import QComboBox, QInputDialog, QMessageBox
+        from PyQt6.QtWidgets import QComboBox
         self._memory_file_combo = QComboBox()
-        self._memory_file_combo.setFont(QFont("Consolas", 8))
-        self._memory_file_combo.setFixedHeight(22)
-        self._memory_file_combo.setStyleSheet(f"""
-            QComboBox {{ background: {C.DARK}; color: {C.TEXT}; border: 1px solid {C.BORDER_B}; border-radius: 2px; padding: 1px 6px; }}
-            QComboBox QAbstractItemView {{ background: {C.DARK}; color: {C.TEXT}; selection-background-color: {C.PRI_GHO}; }}
-        """)
+        self._memory_file_combo.setFont(QFont("Segoe UI", 8))
+        self._memory_file_combo.setFixedHeight(24)
         self._memory_file_combo.currentIndexChanged.connect(self._on_memory_file_changed)
         hdr.addWidget(self._memory_file_combo)
 
-        # Pulsante Nuova Nota
-        new_btn = QPushButton("➕ NEW")
-        new_btn.setFont(QFont("Consolas", 7, QFont.Weight.Bold))
-        new_btn.setFixedHeight(22)
-        new_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        new_btn.setStyleSheet(f"QPushButton {{ background: #00121f; color: {C.PRI}; border: 1px solid {C.PRI_DIM}; border-radius: 2px; padding: 0 6px; }} QPushButton:hover {{ background: {C.PRI_GHO}; }}")
-        new_btn.clicked.connect(self._create_new_memory_file)
-        hdr.addWidget(new_btn)
+        # Pulsanti Azione (New, Save, Delete)
+        self._cp_new_btn = QPushButton("+ NEW")
+        self._cp_new_btn.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
+        self._cp_new_btn.setFixedHeight(24)
+        self._cp_new_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._cp_new_btn.clicked.connect(self._create_new_memory_file)
+        hdr.addWidget(self._cp_new_btn)
 
-        # Pulsante Salva
-        save_btn = QPushButton("💾 SAVE")
-        save_btn.setFont(QFont("Consolas", 7, QFont.Weight.Bold))
-        save_btn.setFixedHeight(22)
-        save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        save_btn.setStyleSheet(f"QPushButton {{ background: #001f12; color: {C.GREEN}; border: 1px solid {C.GREEN_D}; border-radius: 2px; padding: 0 6px; }} QPushButton:hover {{ background: #00331d; }}")
-        save_btn.clicked.connect(self._save_current_memory_file)
-        hdr.addWidget(save_btn)
+        self._cp_save_btn = QPushButton("💾 SAVE")
+        self._cp_save_btn.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
+        self._cp_save_btn.setFixedHeight(24)
+        self._cp_save_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._cp_save_btn.clicked.connect(self._save_current_memory_file)
+        hdr.addWidget(self._cp_save_btn)
 
-        # Pulsante Elimina
-        del_btn = QPushButton("🗑️")
-        del_btn.setFont(QFont("Consolas", 7, QFont.Weight.Bold))
-        del_btn.setFixedHeight(22)
-        del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        del_btn.setStyleSheet(f"QPushButton {{ background: #200008; color: {C.RED}; border: 1px solid {C.RED}; border-radius: 2px; padding: 0 4px; }} QPushButton:hover {{ background: #330010; }}")
-        del_btn.clicked.connect(self._delete_current_memory_file)
-        hdr.addWidget(del_btn)
+        self._cp_del_btn = QPushButton("🗑️")
+        self._cp_del_btn.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
+        self._cp_del_btn.setFixedHeight(24)
+        self._cp_del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._cp_del_btn.clicked.connect(self._delete_current_memory_file)
+        hdr.addWidget(self._cp_del_btn)
 
         hdr.addStretch()
-        dismiss = QPushButton("DISMISS  ✕")
-        dismiss.setFont(QFont("Consolas", 7))
-        dismiss.setFixedHeight(18)
-        dismiss.setCursor(Qt.CursorShape.PointingHandCursor)
-        dismiss.setStyleSheet(f"QPushButton {{ background: transparent; color: {C.TEXT_DIM}; border: 1px solid {C.BORDER}; border-radius: 2px; padding: 0 5px; }} QPushButton:hover {{ color: {C.TEXT}; border-color: {C.BORDER_B}; }}")
-        dismiss.clicked.connect(w.hide)
-        hdr.addWidget(dismiss)
+
+        # Pulsante DISMISS
+        self._cp_dismiss_btn = QPushButton("DISMISS ✕")
+        self._cp_dismiss_btn.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
+        self._cp_dismiss_btn.setFixedHeight(22)
+        self._cp_dismiss_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._cp_dismiss_btn.clicked.connect(self._content_panel_w.hide)
+        hdr.addWidget(self._cp_dismiss_btn)
+
         lay.addLayout(hdr)
 
-        sep = QFrame(); sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet(f"color: {C.BORDER};"); lay.addWidget(sep)
+        self._cp_sep = QFrame()
+        self._cp_sep.setFrameShape(QFrame.Shape.HLine)
+        lay.addWidget(self._cp_sep)
 
-        # Editor di testo con font Consolas ad alta visibilità
+        # Editor di testo Notizie / Data Feed
         self._content_display = QTextEdit()
         self._content_display.setReadOnly(False)
         self._content_display.setMinimumHeight(120)
         self._content_display.setSizePolicy(
             QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
         )
-        self._content_display.setStyleSheet(f"""
-            QTextEdit {{
-                background: {C.DARK};
-                color: {C.WHITE};
-                font-family: 'Consolas', monospace !important;
-                font-size: 13px;
-                border: 1px solid {C.BORDER};
-                border-radius: 3px;
-                padding: 8px;
-                selection-background-color: {C.PRI_GHO};
-            }}
-            QScrollBar:vertical {{ background: {C.BG}; width: 6px; border: none; }}
-            QScrollBar::handle:vertical {{ background: {C.BORDER_B}; border-radius: 3px; min-height: 16px; }}
-        """)
         lay.addWidget(self._content_display)
 
-        return w
+        # Applica immediatamente gli stili dinamici
+        self._update_content_panel_styles()
+        return self._content_panel_w
+
+    def _update_content_panel_styles(self):
+        """Aggiorna i colori del ContentPanel in base al tema attivo."""
+        bg_main = getattr(self, "c_bg_main", "#0b0e14")
+        bg_card = getattr(self, "c_bg_card", "#131722")
+        border  = getattr(self, "c_border", "#1f293d")
+        accent  = getattr(self, "c_accent", "#00f0ff")
+        subtext = getattr(self, "c_subtext", "#e2e8f0")
+
+        if hasattr(self, "_content_panel_w") and self._content_panel_w:
+            self._content_panel_w.setStyleSheet(f"QWidget#ContentPanel {{ background: {bg_main}; border-top: 1px solid {border}; }}")
+
+        if hasattr(self, "_content_title_lbl"):
+            self._content_title_lbl.setStyleSheet(f"color: {accent}; background: transparent; letter-spacing: 1.5px;")
+
+        if hasattr(self, "_memory_file_combo"):
+            self._memory_file_combo.setStyleSheet(f"""
+                QComboBox {{
+                    background: {bg_card}; color: {subtext};
+                    border: 1px solid {border}; border-radius: 4px; padding: 1px 8px;
+                }}
+                QComboBox QAbstractItemView {{
+                    background: {bg_card}; color: {subtext};
+                    selection-background-color: {bg_main}; selection-color: {accent};
+                }}
+            """)
+
+        if hasattr(self, "_content_display"):
+            self._content_display.setStyleSheet(f"""
+                QTextEdit {{
+                    background: {bg_main};
+                    color: {subtext};
+                    font-family: 'Segoe UI', sans-serif;
+                    font-size: 12px;
+                    border: 1px solid {border};
+                    border-radius: 6px;
+                    padding: 10px;
+                    selection-background-color: {bg_card};
+                    selection-color: {accent};
+                }}
+                QScrollBar:vertical {{
+                    background: {bg_main}; width: 6px; border: none; margin: 2px;
+                }}
+                QScrollBar::handle:vertical {{
+                    background: {border}; border-radius: 3px; min-height: 20px;
+                }}
+                QScrollBar::handle:vertical:hover {{
+                    background: {accent};
+                }}
+            """)
+
+        if hasattr(self, "_cp_sep"):
+            self._cp_sep.setStyleSheet(f"color: {border}; margin: 1px 0;")
+
+        if hasattr(self, "_cp_dismiss_btn"):
+            self._cp_dismiss_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: transparent; color: #5a657b;
+                    border: 1px solid {border}; border-radius: 4px; padding: 0 8px;
+                }}
+                QPushButton:hover {{ color: #ff3355; border-color: #ff3355; }}
+            """)
 
     def _load_memory_vault_view(self):
-        """Carica le note nel pannello inferiore dell'HUD collegando la tendina _memory_file_combo."""
+        """Carica le note nel pannello inferiore dell'HUD collegando la tendina _memory_file_combo (ricorsivo)."""
         from pathlib import Path
 
         try:
             vault_path = self._get_or_setup_memory_dir()
-            md_files = sorted(list(vault_path.glob("*.md")))
+            md_files = sorted([p for p in vault_path.rglob("*.md") if p.is_file()])
 
-            # Colleghiamo la vera QComboBox dell'interfaccia
             combo = self._memory_file_combo
 
             combo.blockSignals(True)
@@ -2992,12 +4036,12 @@ class MainWindow(QMainWindow):
 
             if md_files:
                 for f in md_files:
-                    combo.addItem(f.name, str(f.resolve()))
+                    rel_path = str(f.relative_to(vault_path)).replace("\\", "/")
+                    combo.addItem(rel_path, str(f.resolve()))
 
                 combo.setEnabled(True)
                 combo.blockSignals(False)
 
-                # Mostra la prima nota trovata
                 first_file = md_files[0]
                 testo = first_file.read_text(encoding="utf-8", errors="ignore")
                 self._show_content(f"🧠 {first_file.name}", testo)
@@ -3117,12 +4161,11 @@ class MainWindow(QMainWindow):
                 self._load_memory_vault_view()
 
     def _show_content(self, title: str, text: str):
-        self._content_title_lbl.setText(title.upper()[:48])
+        self._content_title_lbl.setText(f"▶ {title.upper()[:48]}")
         self._content_display.setPlainText(text)
         
-        # Forzatura diretta del font anche quando la vista viene aperta da un comando/briefing
+        # Formattazione tipografica per il Data Feed News
         font = QFont("Segoe UI", 10)
-        font.setStyleHint(QFont.StyleHint.Monospace)
         self._content_display.document().setDefaultFont(font)
         self._content_display.setFont(font)
         
@@ -3130,40 +4173,47 @@ class MainWindow(QMainWindow):
         self._content_panel.show()
         if first_show:
             total = self._center_split.height()
-            self._center_split.setSizes([max(total - 260, 120), 260])
+            self._center_split.setSizes([max(total - 240, 120), 240])
 
-    def _build_footer(self) -> QWidget:
-        w = QWidget()
-        w.setFixedHeight(22)
-        w.setStyleSheet(f"background: {C.DARK}; border-top: 1px solid {C.BORDER};")
-        lay = QHBoxLayout(w); lay.setContentsMargins(14, 0, 14, 0)
+    
 
-        def _fl(txt, color=C.TEXT_MED):
-            l = QLabel(txt); l.setFont(QFont("Courier New", 7))
-            l.setStyleSheet(f"color: {color}; background: transparent;")
-            return l
+    def _on_file_selected(self, source):
+        # 1. Risoluzione del percorso in base al tipo di parametro ricevuto
+        if isinstance(source, QModelIndex):
+            if not hasattr(self, 'model'):
+                return  # Evita il crash se invocato prima dell'inizializzazione del modello
+            path = self.model.filePath(source)
+        elif isinstance(source, (str, Path)):
+            path = str(source)
+        else:
+            return
 
-        lay.addWidget(_fl("[F4] Mute  ·  [F11] Fullscreen"))
-        lay.addStretch()
-        lay.addWidget(_fl("By FatihMakes", C.PRI_DIM))
-        return w
+        p = Path(path)
+    
+        # 2. Controllo validità ed estensione .md
+        if p.is_file() and p.suffix.lower() == ".md":
+            self.current_file_path = p
+        
+            if hasattr(self, 'title_label'):
+                self.title_label.setText(p.stem)
 
-    def _on_file_selected(self, path: str):
-        self._current_file = path
-        p    = Path(path)
-        cat  = _file_category(p)
-        icon, _ = _FILE_ICONS.get(cat, _FILE_ICONS["unknown"])
-        size = _fmt_size(p.stat().st_size)
-        self._file_hint.setText(f"{icon}  {p.name}  ·  {size}  ·  Tell {self._assistant_name} what to do with it")
-        self._log.append_log(f"FILE: {p.name} ({size}) loaded")
-        if self.on_text_command:
-            msg = (
-                f"[FILE_UPLOADED] path={path} | name={p.name} | "
-                f"type={p.suffix.lstrip('.')} | size={size} | "
-                f"Briefly tell the user you can see the file '{p.name}' "
-                f"({size}) has been uploaded and ask what they'd like to do with it."
-            )
-            threading.Thread(target=self.on_text_command, args=(msg,), daemon=True).start()
+            if not hasattr(self, 'editor'):
+                return
+
+            try:
+                self.editor.blockSignals(True)
+                content = p.read_text(encoding="utf-8", errors="ignore")
+                self.editor.setPlainText(content)
+            except Exception as e:
+                print(f"[JARVIS Vault Error] Impossibile leggere il file {p.name}: {e}")
+                self.editor.setPlainText(f"⚠️ Errore durante il caricamento della nota:\n{e}")
+            finally:
+                # Assicura il ripristino dei segnali anche in caso di eccezione
+                self.editor.blockSignals(False)
+
+            # 3. Aggiornamento delle statistiche (conteggio parole/caratteri)
+            if hasattr(self, '_update_stats'):
+                self._update_stats()
 
     def notify_phone_connected(self) -> None:
         if self._remote_overlay and self._remote_overlay.isVisible():
@@ -3367,11 +4417,20 @@ class MainWindow(QMainWindow):
         self._assistant_name = name.strip() or "JARVIS"
         display = self._assistant_name.upper()
         self.setWindowTitle(f"{display} — MARK XLIX")
+        
+        # Applicazione diretta di Segoe UI Moderno
         self._title_lbl.setText(display)
+        self._title_lbl.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
+        self._title_lbl.setStyleSheet("color: #00f0ff; background: transparent; letter-spacing: 3px;")
+
         if display in ("JARVIS", "J.A.R.V.I.S"):
             self._sub_lbl.setText("Just A Rather Very Intelligent System")
         else:
             self._sub_lbl.setText("Personal AI Assistant")
+            
+        self._sub_lbl.setFont(QFont("Segoe UI", 8, QFont.Weight.Normal))
+        self._sub_lbl.setStyleSheet("color: #5a657b; background: transparent; letter-spacing: 1px;")
+
         self._log._ai_name_lc = self._assistant_name.lower()
         self.hud._assistant_name = display
 
@@ -3379,7 +4438,6 @@ class MainWindow(QMainWindow):
         if ui_color:
             old = current_palette()
             if apply_ui_accent(ui_color):
-                # Tüm arayüzü (paneller, butonlar, kenarlıklar, HUD) canlı boya
                 retheme_all_widgets(old, current_palette())
                 color_changed = old["PRI"] != C.PRI
 
@@ -3395,7 +4453,6 @@ class MainWindow(QMainWindow):
                 self._log.append_log(f"SYS: UI colour applied — {ui_color}")
         except Exception as e:
             self._log.append_log(f"ERR: Config save failed — {e}")
-
     # ── Clipboard intelligence ───────────────────────────────────────────────────
 
     def _on_clipboard_changed(self):
@@ -3506,6 +4563,33 @@ class MainWindow(QMainWindow):
         self._assistant_name = _read_full_config().get("assistant_name", "JARVIS") or "JARVIS"
         self._log.append_log(f"SYS: Initialised. OS={os_name.upper()}. {self._assistant_name} online.")
 
+    def dragEnterEvent(self, event):
+        """Accetta il file in ingresso ed evidenzia la zona di rilascio."""
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+            if hasattr(self, '_drop_overlay'):
+                self._drop_overlay.setGeometry(self.rect().adjusted(15, 15, -15, -15))
+                self._drop_overlay.show()
+                self._drop_overlay.raise_()
+
+    def dragLeaveEvent(self, event):
+        """Nasconde l'overlay se esci dalla finestra."""
+        if hasattr(self, '_drop_overlay'):
+            self._drop_overlay.hide()
+
+    def dropEvent(self, event):
+        if hasattr(self, '_drop_overlay'):
+            self._drop_overlay.hide()
+
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+            urls = event.mimeData().urls()
+            if urls:
+                file_path = urls[0].toLocalFile()
+                if file_path:
+                    import actions.smart_drop_handler as sdh
+                    sdh.process_dropped_file(file_path, parent_window=self)
+
 class _RootShim:
     def __init__(self, app: QApplication):
         self._app = app
@@ -3522,6 +4606,36 @@ class JarvisUI:
         self._win = MainWindow(face_path)
         self._win.show()
         self.root = _RootShim(self._app)
+
+        # Applicazione del tema salvato nel file di configurazione all'avvio
+        self._load_and_apply_initial_theme()
+
+    def _load_and_apply_initial_theme(self):
+        """Legge il tema dal file di configurazione e lo applica a MainWindow."""
+        import json
+        from pathlib import Path
+
+        config_path = Path("./config/settings.json")
+        saved_theme = "Cyan Cyberpunk (Default)"
+
+        if config_path.exists():
+            try:
+                config = json.loads(config_path.read_text(encoding="utf-8"))
+                saved_theme = config.get("theme", saved_theme)
+            except Exception:
+                pass
+        else:
+            # Fallback su config.json se presente nella root
+            root_config = Path("config.json")
+            if root_config.exists():
+                try:
+                    config = json.loads(root_config.read_text(encoding="utf-8"))
+                    saved_theme = config.get("theme", saved_theme)
+                except Exception:
+                    pass
+
+        if hasattr(self._win, "apply_theme"):
+            self._win.apply_theme(saved_theme)
 
     @property
     def muted(self) -> bool:
@@ -3595,9 +4709,9 @@ class JarvisUI:
             if path.exists():
                 return path
 
-        # Altrimenti (primo avvio) chiede all'utente di sceglierla
+        # Corretto: si passa self._win come QWidget padre per il QFileDialog
         chosen_dir = QFileDialog.getExistingDirectory(
-            self, 
+            self._win, 
             "INSTALLAZIONE JARVIS — Seleziona la cartella per la Memoria (.md)",
             str(Path.home())
         )
@@ -3646,10 +4760,6 @@ class JarvisUI:
     def stop_speaking(self):
         if not self.muted:
             self.set_state("LISTENING")
-
-    from PyQt6.QtGui import QFileSystemModel
-    from PyQt6.QtWidgets import QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QTreeView, QTextEdit, QLabel, QPushButton, QSplitter
-
 from PyQt6.QtGui import QTextCursor, QTextBlockFormat, QTextCharFormat
 
 FONT_MODERNO = QFont("Cascadia Code", 10)
@@ -3683,302 +4793,402 @@ class MarkdownEditor(QTextEdit):
 
         super().keyPressEvent(event)
 
+import os
+from pathlib import Path
+from PyQt6.QtCore import Qt, QTimer, QSize, QModelIndex, QRectF, QDir
+from PyQt6.QtGui import QFont, QColor, QIcon, QKeySequence, QAction, QFileSystemModel
+from PyQt6.QtWidgets import (
+    QMainWindow, QWidget, QHBoxLayout, QVBoxLayout, QSplitter,
+    QLabel, QTextEdit, QTreeView, QHeaderView,
+    QPushButton, QMenu, QInputDialog, QMessageBox, QFrame,
+    QAbstractItemView
+)
+
 class ObsidianVaultWindow(QMainWindow):
-    """Finestra stile Obsidian con font moderno, formattazione Markdown, Drag & Drop e Sottocartelle."""
-    def __init__(self, vault_path, parent=None):
+    """Memory Vault in perfetto stile Obsidian — Drag&Drop, Ordinamento Alfabetico & Editor Zen."""
+    def __init__(self, vault_path: str, parent=None):
         super().__init__(parent)
-        self.vault_path = vault_path
-        self.setWindowTitle("JARVIS — Personal Memory Vault (Obsidian Mode)")
-        self.resize(1050, 680)
-        
-        main_widget = QWidget()
-        self.setCentralWidget(main_widget)
-        main_layout = QVBoxLayout(main_widget)
-        main_layout.setContentsMargins(10, 10, 10, 10)
+        self.vault_path = Path(vault_path)
+        self.vault_path.mkdir(parents=True, exist_ok=True)
+
+        self.current_file_path = None
+
+        # Timer per Auto-Save automatico (2 secondi dopo l'ultima modifica)
+        self._auto_save_timer = QTimer(self)
+        self._auto_save_timer.setSingleShot(True)
+        self._auto_save_timer.setInterval(2000)
+        self._auto_save_timer.timeout.connect(self._auto_save_active_file)
+
+        self.setWindowTitle("MEMORY VAULT — OBSIDIAN CORE")
+        self.resize(1100, 700)
+        self._setup_ui()
+        self._apply_obsidian_theme()
+
+    def _setup_ui(self):
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        main_layout = QHBoxLayout(central_widget)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
+        splitter.setHandleWidth(1)
 
-        # --- SIDEBAR SINISTRA ---
-        sidebar = QWidget()
-        side_layout = QVBoxLayout(sidebar)
-        side_layout.setContentsMargins(0, 0, 0, 0)
-        side_layout.setSpacing(6)
+        # ── 1. SIDEBAR FILE EXPLORER ─────────────────────────────────────────
+        sidebar_widget = QWidget()
+        sidebar_layout = QVBoxLayout(sidebar_widget)
+        sidebar_layout.setContentsMargins(12, 12, 12, 12)
+        sidebar_layout.setSpacing(10)
 
-        hdr_sidebar = QHBoxLayout()
-        lbl_tree = QLabel("📂 EXPLORER")
-        lbl_tree.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
-        lbl_tree.setStyleSheet(f"color: {C.PRI};")
-        hdr_sidebar.addWidget(lbl_tree)
-        hdr_sidebar.addStretch()
+        sidebar_header = QHBoxLayout()
+        vault_label = QLabel("VAULT EXPLORER")
+        vault_label.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
+        vault_label.setStyleSheet("color: #7d8590; letter-spacing: 1px;")
+        sidebar_header.addWidget(vault_label)
+        sidebar_header.addStretch()
+
+        btn_new_file = QPushButton("📄+")
+        btn_new_file.setToolTip("Nuova Nota")
+        btn_new_file.setFixedSize(26, 26)
+        btn_new_file.clicked.connect(self._create_new_file)
 
         btn_new_folder = QPushButton("📁+")
-        btn_new_folder.setToolTip("Crea Nuova Sottocartella")
-        btn_new_folder.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
-        btn_new_folder.setStyleSheet(f"QPushButton {{ background: #00121f; color: {C.PRI}; border: 1px solid {C.PRI_DIM}; padding: 2px 6px; }} QPushButton:hover {{ background: {C.PRI_GHO}; }}")
+        btn_new_folder.setToolTip("Nuova Cartella")
+        btn_new_folder.setFixedSize(26, 26)
         btn_new_folder.clicked.connect(self._create_new_folder)
-        hdr_sidebar.addWidget(btn_new_folder)
-        side_layout.addLayout(hdr_sidebar)
 
-        self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("🔍 Filtra note...")
-        self.search_input.setFont(QFont("Segoe UI", 8))
-        self.search_input.setStyleSheet(f"""
-            QLineEdit {{
-                background-color: {C.DARK};
-                color: {C.WHITE};
-                border: 1px solid {C.BORDER};
-                border-radius: 3px;
-                padding: 4px;
-            }}
-            QLineEdit:focus {{ border-color: {C.PRI}; }}
-        """)
-        self.search_input.textChanged.connect(self._filter_notes)
-        side_layout.addWidget(self.search_input)
+        btn_refresh = QPushButton("🔄")
+        btn_refresh.setToolTip("Ricarica e Ordina")
+        btn_refresh.setFixedSize(26, 26)
+        btn_refresh.clicked.connect(self._refresh_and_sort)
+
+        for btn in (btn_new_file, btn_new_folder, btn_refresh):
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setStyleSheet("""
+                QPushButton {
+                    background: transparent;
+                    color: #7d8590;
+                    border: none;
+                    border-radius: 4px;
+                    font-size: 13px;
+                }
+                QPushButton:hover {
+                    background: #1e2330;
+                    color: #00f0ff;
+                }
+            """)
+            sidebar_header.addWidget(btn)
+
+        sidebar_layout.addLayout(sidebar_header)
 
         self.model = QFileSystemModel()
-        self.model.setReadOnly(False)
         self.model.setRootPath(str(self.vault_path))
+        self.model.setReadOnly(False)
         self.model.setFilter(QDir.Filter.AllDirs | QDir.Filter.Files | QDir.Filter.NoDotAndDotDot)
         self.model.setNameFilters(["*.md"])
         self.model.setNameFilterDisables(False)
 
-        self.tree = QTreeView()
-        self.tree.setModel(self.model)
-        self.tree.setRootIndex(self.model.index(str(self.vault_path)))
-        for col in range(1, 4):
-            self.tree.setColumnHidden(col, True)
-        self.tree.setHeaderHidden(True)
-        self.tree.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
-        self.tree.customContextMenuRequested.connect(self._show_tree_context_menu)
+        self.tree_view = QTreeView()
+        self.tree_view.setModel(self.model)
+        self.tree_view.setRootIndex(self.model.index(str(self.vault_path)))
+        self.tree_view.setDragEnabled(True)
+        self.tree_view.setAcceptDrops(True)
+        self.tree_view.setDropIndicatorShown(True)
+        self.tree_view.setDragDropMode(QAbstractItemView.DragDropMode.InternalMove)
+        self.tree_view.setSortingEnabled(True)
+        self.tree_view.sortByColumn(0, Qt.SortOrder.AscendingOrder)
+        
+        for i in range(1, 4):
+            self.tree_view.setColumnHidden(i, True)
+        
+        self.tree_view.setHeaderHidden(True)
+        self.tree_view.setAnimated(True)
+        self.tree_view.setIndentation(14)
+        self.tree_view.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
+        self.tree_view.customContextMenuRequested.connect(self._show_context_menu)
+        self.tree_view.clicked.connect(self._on_file_selected)
 
-        self.tree.setDragEnabled(True)
-        self.tree.setAcceptDrops(True)
-        self.tree.setDropIndicatorShown(True)
-        self.tree.setDragDropMode(QTreeView.DragDropMode.InternalMove)
+        sidebar_layout.addWidget(self.tree_view)
+        splitter.addWidget(sidebar_widget)
 
-        self.tree.setStyleSheet(f"""
-            QTreeView {{
-                background-color: {C.DARK};
-                color: {C.WHITE};
-                border: 1px solid {C.BORDER};
-                font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Segoe UI', monospace;
-                font-size: 13px;
-            }}
-            QTreeView::item:hover {{ background-color: {C.PRI_GHO}; }}
-            QTreeView::item:selected {{ background-color: #002b47; color: {C.PRI}; }}
-        """)
-        self.tree.clicked.connect(self._on_file_selected)
-        side_layout.addWidget(self.tree)
-        splitter.addWidget(sidebar)
-
-        # --- AREA DESTRAMENTE ---
+        # ── 2. EDITOR WORKSPACE (STILE ZEN) ──────────────────────────────────
         editor_widget = QWidget()
-        ed_layout = QVBoxLayout(editor_widget)
-        ed_layout.setContentsMargins(0, 0, 0, 0)
-        ed_layout.setSpacing(6)
+        editor_layout = QVBoxLayout(editor_widget)
+        editor_layout.setContentsMargins(24, 16, 24, 12)
+        editor_layout.setSpacing(8)
 
-        hdr = QHBoxLayout()
-        self.active_file_lbl = QLabel("Nessun file selezionato")
-        self.active_file_lbl.setFont(QFont("Segoe UI", 9, QFont.Weight.Bold))
-        self.active_file_lbl.setStyleSheet(f"color: {C.WHITE};")
-        hdr.addWidget(self.active_file_lbl)
-        hdr.addStretch()
+        self.title_label = QLabel("Seleziona o crea una nota")
+        self.title_label.setFont(QFont("Segoe UI", 16, QFont.Weight.Bold))
+        self.title_label.setStyleSheet("color: #e6edf3; padding-bottom: 4px;")
+        editor_layout.addWidget(self.title_label)
 
-        new_btn = QPushButton("➕ NUOVA (Ctrl+N)")
-        new_btn.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
-        new_btn.setStyleSheet(f"QPushButton {{ background: #00121f; color: {C.PRI}; border: 1px solid {C.PRI_DIM}; padding: 4px 10px; }} QPushButton:hover {{ background: {C.PRI_GHO}; }}")
-        new_btn.clicked.connect(self._create_new_file)
-        hdr.addWidget(new_btn)
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setStyleSheet("background-color: #21262d; max-height: 1px; border: none;")
+        editor_layout.addWidget(sep)
 
-        save_btn = QPushButton("💾 SALVA (Ctrl+S)")
-        save_btn.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
-        save_btn.setStyleSheet(f"QPushButton {{ background: #001f12; color: {C.GREEN}; border: 1px solid {C.GREEN_D}; padding: 4px 10px; }} QPushButton:hover {{ background: #00331d; }}")
-        save_btn.clicked.connect(self._save_active_file)
-        hdr.addWidget(save_btn)
+        self.editor = QTextEdit()
+        self.editor.setFont(QFont("Segoe UI", 11))
+        self.editor.setPlaceholderText("Inizia a scrivere la tua nota in Markdown...")
+        self.editor.textChanged.connect(self._on_text_changed)
+        editor_layout.addWidget(self.editor)
 
-        del_btn = QPushButton("🗑️ ELIMINA")
-        del_btn.setFont(QFont("Segoe UI", 8, QFont.Weight.Bold))
-        del_btn.setStyleSheet(f"QPushButton {{ background: #200008; color: {C.RED}; border: 1px solid {C.RED}; padding: 4px 10px; }} QPushButton:hover {{ background: #330010; }}")
-        del_btn.clicked.connect(self._delete_active_file)
-        hdr.addWidget(del_btn)
+        footer_layout = QHBoxLayout()
+        self.status_lbl = QLabel("● Pronto")
+        self.status_lbl.setFont(QFont("Segoe UI", 8))
+        self.status_lbl.setStyleSheet("color: #7d8590;")
 
-        ed_layout.addLayout(hdr)
+        self.stats_lbl = QLabel("0 parole | 0 caratteri")
+        self.stats_lbl.setFont(QFont("Segoe UI", 8))
+        self.stats_lbl.setStyleSheet("color: #7d8590;")
 
-        self.editor = MarkdownEditor()
-        self.editor.setStyleSheet(f"""
-            QTextEdit {{
-                background-color: {C.DARK};
-                color: {C.WHITE};
-                border: 1px solid {C.BORDER};
-                padding: 12px;
-                font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Segoe UI', monospace;
-                font-size: 13px;
-                line-height: 1.4;
-            }}
-        """)
-        self.editor.textChanged.connect(self._update_stats)
-        ed_layout.addWidget(self.editor)
+        footer_layout.addWidget(self.status_lbl)
+        footer_layout.addStretch()
+        footer_layout.addWidget(self.stats_lbl)
+        editor_layout.addLayout(footer_layout)
 
-        self.status_bar = QLabel("Parole: 0 | Caratteri: 0")
-        self.status_bar.setFont(QFont("Segoe UI", 8))
-        self.status_bar.setStyleSheet(f"color: {C.TEXT_DIM}; padding: 2px;")
-        ed_layout.addWidget(self.status_bar)
+        # ── 3. GRAPH VIEW 2D & TABBED WORKSPACE ──────────────────────────────
+        from ui_graph import ObsidianGraphView
 
-        splitter.addWidget(editor_widget)
-        splitter.setSizes([280, 770])
+        # Inizializzazione della vista grafico col nuovo parser gerarchico
+        self.graph_view = ObsidianGraphView(vault_path=self.vault_path, parent=self)
+
+        self.right_tabs = QTabWidget()
+        self.right_tabs.addTab(editor_widget, "📝 Editor Note")
+        self.right_tabs.addTab(self.graph_view, "🕸️ Graph View 2D")
+
+        # Applica subito lo stile cromatico dinamico ai tab
+        self._update_notes_tabs_styles()
+
+        splitter.addWidget(self.right_tabs)
+
+        # Proporzione Splitter (250px Sidebar, 850px Workspace)
+        splitter.setSizes([250, 850])
         main_layout.addWidget(splitter)
 
-        self.current_file_path = None
+    def _update_notes_tabs_styles(self):
+        """Aggiorna lo stile cromatico dei tab dell'Editor e del Graph View in base al tema attivo."""
+        bg_main = getattr(self, "c_bg_main", "#0b0e14")
+        bg_card = getattr(self, "c_bg_card", "#131722")
+        border  = getattr(self, "c_border", "#1f293d")
+        accent  = getattr(self, "c_accent", "#00f0ff")
+        subtext = getattr(self, "c_subtext", "#7d8590")
 
-        # Shortcut da Tastiera
-        QShortcut(QKeySequence("Ctrl+S"), self, self._save_active_file)
-        QShortcut(QKeySequence("Ctrl+N"), self, self._create_new_file)
-        QShortcut(QKeySequence("Ctrl+B"), self, self._toggle_bold)
-        QShortcut(QKeySequence("Ctrl+I"), self, self._toggle_italic)
+        if hasattr(self, "right_tabs") and self.right_tabs:
+            self.right_tabs.setStyleSheet(f"""
+                QTabWidget::pane {{
+                    border: 1px solid {border};
+                    background-color: {bg_main};
+                }}
+                QTabBar::tab {{
+                    background: {bg_card};
+                    color: {subtext};
+                    padding: 8px 16px;
+                    border: none;
+                    font-family: 'Segoe UI';
+                    font-size: 12px;
+                }}
+                QTabBar::tab:selected {{
+                    background: {bg_main};
+                    color: {accent};
+                    border-bottom: 2px solid {accent};
+                }}
+            """)
 
-    def _toggle_bold(self):
-        fmt = self.editor.currentCharFormat()
-        weight = QFont.Weight.Normal if fmt.fontWeight() == QFont.Weight.Bold else QFont.Weight.Bold
-        fmt.setFontWeight(weight)
-        self.editor.mergeCurrentCharFormat(fmt)
+        # Propaga il cambio tema anche al GraphView 2D
+        if hasattr(self, "graph_view") and hasattr(self.graph_view, "apply_theme"):
+            self.graph_view.apply_theme(bg_main, accent, border, subtext)
 
-    def _toggle_italic(self):
-        fmt = self.editor.currentCharFormat()
-        fmt.setFontItalic(not fmt.fontItalic())
-        self.editor.mergeCurrentCharFormat(fmt)
+    def _apply_obsidian_theme(self):
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #0b0e14;
+            }
+            QWidget {
+                background-color: #0b0e14;
+                color: #c9d1d9;
+            }
+            QSplitter::handle {
+                background-color: #1e2330;
+            }
+            QTreeView {
+                background-color: #080a0f;
+                border: none;
+                color: #8b949e;
+                font-family: 'Segoe UI';
+                font-size: 13px;
+            }
+            QTreeView::item {
+                padding: 4px 6px;
+                border-radius: 4px;
+            }
+            QTreeView::item:hover {
+                background-color: #161b22;
+                color: #f0f6fc;
+            }
+            QTreeView::item:selected {
+                background-color: #1f2430;
+                color: #00f0ff;
+            }
+            QTextEdit {
+                background-color: #0b0e14;
+                border: none;
+                color: #e6edf3;
+                selection-background-color: #1f2d40;
+                selection-color: #00f0ff;
+                line-height: 1.5;
+            }
+        """)
 
-    def _filter_notes(self, text):
-        pattern = f"*{text.strip()}*.md" if text.strip() else "*.md"
-        self.model.setNameFilters([pattern])
+    def _refresh_and_sort(self):
+        self.model.setRootPath(str(self.vault_path))
+        self.tree_view.sortByColumn(0, Qt.SortOrder.AscendingOrder)
+        if hasattr(self, "graph_view") and self.graph_view:
+            self.graph_view.refresh_graph()
+
+    def _on_file_selected(self, index: QModelIndex):
+        path = self.model.filePath(index)
+        p = Path(path)
+        if p.is_file() and p.suffix.lower() == ".md":
+            self.current_file_path = p
+            self.title_label.setText(p.stem)
+            try:
+                self.editor.blockSignals(True)
+                content = p.read_text(encoding="utf-8")
+                self.editor.setPlainText(content)
+                self.editor.blockSignals(False)
+                self._update_stats()
+                self.status_lbl.setText("● Salvato")
+                self.status_lbl.setStyleSheet("color: #00f0ff;")
+            except Exception as e:
+                self.editor.blockSignals(False)
+                self.status_lbl.setText(f"Errore: {e}")
+
+    def _on_text_changed(self):
+        if self.current_file_path:
+            self.status_lbl.setText("● In modifica...")
+            self.status_lbl.setStyleSheet("color: #a855f7;")
+            self._update_stats()
+            self._auto_save_timer.start()
+
+    def _auto_save_active_file(self):
+        if self.current_file_path and self.current_file_path.exists():
+            try:
+                text = self.editor.toPlainText()
+                self.current_file_path.write_text(text, encoding="utf-8")
+                self.status_lbl.setText("● Salvato")
+                self.status_lbl.setStyleSheet("color: #00f0ff;")
+                # Aggiornamento real-time del grafico al salvataggio
+                if hasattr(self, "graph_view") and self.graph_view:
+                    self.graph_view.refresh_graph()
+            except Exception as e:
+                self.status_lbl.setText(f"Errore salvataggio: {e}")
+                self.status_lbl.setStyleSheet("color: #ff3355;")
 
     def _update_stats(self):
         text = self.editor.toPlainText()
-        words = len(text.split()) if text.strip() else 0
+        words = len(text.split())
         chars = len(text)
-        self.status_bar.setText(f"Parole: {words} | Caratteri: {chars}")
-
-    def _on_file_selected(self, index):
-        path = self.model.filePath(index)
-        from pathlib import Path
-        p = Path(path)
-        if p.is_file() and p.suffix == ".md":
-            self.current_file_path = p
-            try:
-                rel_path = p.relative_to(self.vault_path)
-                self.active_file_lbl.setText(f"📄 {rel_path}")
-            except Exception:
-                self.active_file_lbl.setText(f"📄 {p.name}")
-            try:
-                self.editor.setMarkdown(p.read_text(encoding="utf-8"))
-            except Exception:
-                self.editor.setPlainText(p.read_text(encoding="utf-8"))
-
-    def _get_selected_folder(self) -> Path:
-        from pathlib import Path
-        idx = self.tree.currentIndex()
-        if idx.isValid():
-            p = Path(self.model.filePath(idx))
-            if p.is_dir():
-                return p
-            elif p.is_file():
-                return p.parent
-        return Path(self.vault_path)
-
-    def _create_new_folder(self):
-        from PyQt6.QtWidgets import QInputDialog
-        from pathlib import Path
-
-        target_dir = self._get_selected_folder()
-        folder_name, ok = QInputDialog.getText(self, "Obsidian Memory Vault", f"Nuova sottocartella in '{target_dir.name}':")
-        if ok and folder_name.strip():
-            new_dir = target_dir / folder_name.strip()
-            try:
-                new_dir.mkdir(parents=True, exist_ok=True)
-            except Exception as e:
-                self.active_file_lbl.setText(f"Errore creazione cartella: {e}")
+        self.stats_lbl.setText(f"{words} parole | {chars} caratteri")
 
     def _create_new_file(self):
-        from PyQt6.QtWidgets import QInputDialog
-        from pathlib import Path
-
-        target_dir = self._get_selected_folder()
-        title, ok = QInputDialog.getText(self, "Obsidian Memory Vault", f"Nome nuova nota in '{target_dir.name}':")
-        if ok and title.strip():
-            filename = title.strip()
-            if not filename.endswith(".md"):
-                filename += ".md"
-
-            new_path = target_dir / filename
-            if not new_path.exists():
-                try:
-                    new_path.write_text(f"# {title.strip()}\n\n", encoding="utf-8")
-                    self.current_file_path = new_path
-                    self.active_file_lbl.setText(f"📄 {new_path.relative_to(self.vault_path)}")
-                    self.editor.setMarkdown(new_path.read_text(encoding="utf-8"))
-                    idx = self.model.index(str(new_path))
-                    self.tree.setCurrentIndex(idx)
-                except Exception as e:
-                    self.active_file_lbl.setText(f"Errore creazione file: {e}")
-
-    def _show_tree_context_menu(self, position):
-        from PyQt6.QtWidgets import QMenu
-        from PyQt6.QtGui import QAction
-
-        idx = self.tree.indexAt(position)
-        menu = QMenu(self)
-        menu.setStyleSheet(f"QMenu {{ background: {C.DARK}; color: {C.WHITE}; border: 1px solid {C.BORDER}; }} QMenu::item:selected {{ background: {C.PRI_GHO}; color: {C.PRI}; }}")
-
-        act_new_note = QAction("➕ Nuova Nota Qui", self)
-        act_new_note.triggered.connect(self._create_new_file)
-        menu.addAction(act_new_note)
-
-        act_new_folder = QAction("📁 Nuova Sottocartella Qui", self)
-        act_new_folder.triggered.connect(self._create_new_folder)
-        menu.addAction(act_new_folder)
-
-        if idx.isValid():
-            menu.addSeparator()
-            act_del = QAction("🗑️ Elimina Elemento", self)
-            act_del.triggered.connect(self._delete_active_file)
-            menu.addAction(act_del)
-
-        menu.exec(self.tree.viewport().mapToGlobal(position))
-
-    def _delete_active_file(self):
-        from PyQt6.QtWidgets import QMessageBox
-        from pathlib import Path
-
-        idx = self.tree.currentIndex()
-        target_path = self.current_file_path
-        if idx.isValid():
-            target_path = Path(self.model.filePath(idx))
-
-        if target_path and target_path.exists():
-            item_type = "la cartella" if target_path.is_dir() else "la nota"
-            reply = QMessageBox.question(
-                self, 
-                "Obsidian Memory Vault", 
-                f"Sei sicuro di voler eliminare {item_type} '{target_path.name}'?",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
-            )
-            if reply == QMessageBox.StandardButton.Yes:
-                try:
-                    if target_path.is_dir():
-                        import shutil
-                        shutil.rmtree(target_path)
-                    else:
-                        target_path.unlink()
-                    
-                    self.active_file_lbl.setText("Nessun file selezionato")
-                    self.editor.clear()
-                    self.current_file_path = None
-                except Exception as e:
-                    self.active_file_lbl.setText(f"Errore eliminazione: {e}")
-
-    def _save_active_file(self):
-        if self.current_file_path and self.current_file_path.exists():
+        name, ok = QInputDialog.getText(self, "Nuova Nota", "Nome della nota (.md):")
+        if ok and name.strip():
+            if not name.endswith(".md"):
+                name += ".md"
+            new_path = self.vault_path / name
             try:
-                self.current_file_path.write_text(self.editor.toMarkdown(), encoding="utf-8")
-                self.active_file_lbl.setText(f"📄 {self.current_file_path.relative_to(self.vault_path)} (Salvato!)")
+                new_path.write_text(f"# {new_path.stem}\n\n", encoding="utf-8")
+                self._refresh_and_sort()
             except Exception as e:
-                self.active_file_lbl.setText(f"Errore salvataggio: {e}")
+                QMessageBox.critical(self, "Errore", f"Impossibile creare il file: {e}")
+
+    def _create_new_folder(self):
+        name, ok = QInputDialog.getText(self, "Nuova Cartella", "Nome della cartella:")
+        if ok and name.strip():
+            new_dir = self.vault_path / name.strip()
+            try:
+                new_dir.mkdir(parents=True, exist_ok=True)
+                self._refresh_and_sort()
+            except Exception as e:
+                QMessageBox.critical(self, "Errore", f"Impossibile creare la cartella: {e}")
+
+    def _show_context_menu(self, position):
+        index = self.tree_view.indexAt(position)
+        if not index.isValid():
+            return
+
+        file_path = Path(self.model.filePath(index))
+        menu = QMenu(self)
+        menu.setStyleSheet("""
+            QMenu {
+                background-color: #161b22;
+                border: 1px solid #30363d;
+                border-radius: 6px;
+                padding: 4px;
+            }
+            QMenu::item {
+                padding: 6px 16px;
+                color: #c9d1d9;
+                font-family: 'Segoe UI';
+                font-size: 12px;
+            }
+            QMenu::item:selected {
+                background-color: #1f2430;
+                color: #00f0ff;
+            }
+        """)
+
+        act_rename = QAction("✏️ Rinomina", self)
+        act_delete = QAction("🗑️ Elimina", self)
+
+        act_rename.triggered.connect(lambda: self._rename_item(file_path))
+        act_delete.triggered.connect(lambda: self._delete_item(file_path))
+
+        menu.addAction(act_rename)
+        menu.addAction(act_delete)
+        menu.exec(self.tree_view.viewport().mapToGlobal(position))
+
+    def _rename_item(self, target_path: Path):
+        new_name, ok = QInputDialog.getText(self, "Rinomina", "Nuovo nome:", text=target_path.name)
+        if ok and new_name.strip():
+            new_path = target_path.parent / new_name.strip()
+            try:
+                target_path.rename(new_path)
+                if self.current_file_path == target_path:
+                    self.current_file_path = new_path
+                    self.title_label.setText(new_path.stem)
+                self._refresh_and_sort()
+            except Exception as e:
+                QMessageBox.critical(self, "Errore", f"Impossibile rinominare: {e}")
+
+    def _delete_item(self, target_path: Path):
+        reply = QMessageBox.question(
+            self, "Conferma eliminazione",
+            f"Sei sicuro di voler eliminare '{target_path.name}'?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                if target_path.is_file():
+                    target_path.unlink()
+                elif target_path.is_dir():
+                    import shutil
+                    shutil.rmtree(target_path)
+                
+                if self.current_file_path == target_path:
+                    self.current_file_path = None
+                    self.title_label.setText("Seleziona o crea una nota")
+                    self.editor.clear()
+                self._refresh_and_sort()
+            except Exception as e:
+                QMessageBox.critical(self, "Errore", f"Impossibile eliminare: {e}")
+
+    def open_note(self, file_path: Path):
+        """Apre la nota selezionata dal grafo 2D dentro l'editor e commuta la scheda."""
+        self.current_file_path = file_path
+        if file_path.exists():
+            text = file_path.read_text(encoding='utf-8', errors='ignore')
+            self.title_label.setText(file_path.stem)
+            self.editor.setPlainText(text)
+            self.right_tabs.setCurrentIndex(0) # Torna al tab Editor
